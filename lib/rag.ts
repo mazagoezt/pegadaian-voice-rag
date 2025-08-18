@@ -5,6 +5,7 @@ export type Hit = { url: string; title: string; snippet: string; score: number }
 
 let INDEX: Doc[] = [];
 
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36 KomoBot/1.0";
 const EMBED_URL = "https://api.openai.com/v1/embeddings";
 const EMBED_MODEL = process.env.EMBED_MODEL || "text-embedding-3-large";
 const MAX_CRAWL = Number(process.env.MAX_CRAWL_URLS || 40);
@@ -12,13 +13,14 @@ const CHUNK_SIZE = Number(process.env.CHUNK_SIZE || 1200);
 const CHUNK_OVERLAP = Number(process.env.CHUNK_OVERLAP || 150);
 
 function splitToChunks(text: string, size = CHUNK_SIZE, overlap = CHUNK_OVERLAP): string[] {
-  const clean = text.replace(/\s+/g, " ").trim();
+  const clean = (text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return [];
   const out: string[] = [];
-  for (let i = 0; i < clean.length; i += (size - overlap)) {
+  for (let i = 0; i < clean.length; i += Math.max(1, (size - overlap))) {
     out.push(clean.slice(i, i + size));
     if (i + size >= clean.length) break;
   }
-  return out.length ? out : [clean];
+  return out;
 }
 
 export async function embedBatch(texts: string[]): Promise<number[][]> {
@@ -35,22 +37,96 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
   return j.data.map((d: any) => d.embedding);
 }
 
+async function discoverLinksFromHome(domain: string): Promise<string[]> {
+  try {
+    const res = await fetch(domain, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
+    if (!res.ok) return [];
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    const origin = new URL(domain).origin;
+    const hrefs = new Set<string>();
+    $("a[href]").each((_, el) => {
+      const href = String($(el).attr("href") || "").trim();
+      if (!href) return;
+      try {
+        const u = new URL(href, origin);
+        if (u.origin === origin && /(produk|product|layanan|service|tentang|about|faq|tabungan|emas|gadai|pembiayaan|investasi|simulasi|lokasi|hubungi)/i.test(u.pathname)) {
+          hrefs.add(u.toString());
+        }
+      } catch {}
+    });
+    return Array.from(hrefs);
+  } catch {
+    return [];
+  }
+}
+
 async function fetchSitemapUrls(domain: string): Promise<string[]> {
-  const url = new URL("/sitemap.xml", domain).toString();
-  const res = await fetch(url);
-  if (!res.ok) return [domain];
-  const xml = await res.text();
-  const urls = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
-  const filtered = urls.filter(u => /(produk|product|layanan|service|tentang|about|faq|syarat|ketentuan|unit|kantor|tabungan|emas|gadai|pembiayaan|investasi)/i.test(u));
-  return filtered.length ? filtered : urls;
+  const urls: Set<string> = new Set();
+  // sitemap.xml
+  try {
+    const sm = new URL("/sitemap.xml", domain).toString();
+    const res = await fetch(sm, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
+    if (res.ok) {
+      const xml = await res.text();
+      const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
+      for (const u of locs) if (/(pegadaian\.co\.id|sahabat\.pegadaian\.co\.id)/.test(u)) urls.add(u);
+    }
+  } catch {}
+  // robots.txt -> Sitemap
+  try {
+    const robots = new URL("/robots.txt", domain).toString();
+    const rr = await fetch(robots, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
+    if (rr.ok) {
+      const txt = await rr.text();
+      const smLines = [...txt.matchAll(/sitemap:\s*(\S+)/gi)].map(m => m[1]);
+      for (const line of smLines) {
+        try {
+          const r2 = await fetch(line, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
+          if (r2.ok) {
+            const xml = await r2.text();
+            const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
+            for (const u of locs) if (/(pegadaian\.co\.id|sahabat\.pegadaian\.co\.id)/.test(u)) urls.add(u);
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+  // discovery dari homepage
+  try {
+    const discovered = await discoverLinksFromHome(domain);
+    for (const d of discovered) urls.add(d);
+  } catch {}
+  // seeds kuat
+  const origin = new URL(domain).origin;
+  const seedsByHost: Record<string, string[]> = {
+    "https://www.pegadaian.co.id": [
+      "https://www.pegadaian.co.id/produk/gadai-emas",
+      "https://www.pegadaian.co.id/produk/gadai-non-emas",
+      "https://www.pegadaian.co.id/produk/gadai-tabungan-emas",
+      "https://www.pegadaian.co.id/produk/titipan-emas-fisik",
+      "https://www.pegadaian.co.id/hubungi-kami",
+      "https://www.pegadaian.co.id/lokasi-cabang"
+    ],
+    "https://www.sahabat.pegadaian.co.id": [
+      "https://www.sahabat.pegadaian.co.id/produk-pegadaian/tabungan-emas",
+      "https://www.sahabat.pegadaian.co.id/produk-pegadaian/gadai-dari-rumah",
+      "https://www.sahabat.pegadaian.co.id/simulasi/simulasi-tabungan-emas"
+    ]
+  };
+  const seeds = seedsByHost[origin] || [];
+  for (const s of seeds) urls.add(s);
+  if (urls.size === 0) urls.add(domain);
+  const filtered = Array.from(urls).filter(u => /(pegadaian\.co\.id|sahabat\.pegadaian\.co\.id)/.test(u));
+  return filtered;
 }
 
 async function fetchPageText(url: string) {
-  const html = await fetch(url, { headers: { "User-Agent": "Pegadaian-VoiceBot/1.0" } }).then(r => r.text());
+  const html = await fetch(url, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any }).then(r => r.text());
   const $ = cheerio.load(html);
   const title = ($("meta[property='og:title']").attr("content") || $("title").text() || "").trim();
   const mainText = $("main").text() || $("article").text() || $("body").text();
-  const content = mainText.replace(/\s+/g, " ").trim();
+  const content = (mainText || "").replace(/\s+/g, " ").trim();
   return { title: title || url, content };
 }
 
@@ -62,7 +138,7 @@ export async function buildIndex() {
   for (const d of domains) {
     try {
       const urls = await fetchSitemapUrls(d);
-      urls.slice(0, Math.ceil(MAX_CRAWL / domains.length)).forEach(u => urlsSet.add(u));
+      urls.slice(0, Math.ceil(MAX_CRAWL / Math.max(1, domains.length))).forEach(u => urlsSet.add(u));
     } catch {}
   }
   const urls = Array.from(urlsSet).slice(0, MAX_CRAWL);

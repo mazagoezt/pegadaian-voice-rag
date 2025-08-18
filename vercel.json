@@ -1,12 +1,4 @@
 {
-  "functions": {
-    "api/**/*.func": {
-      "maxDuration": 60
-    },
-    "api/**": {
-      "maxDuration": 60
-    }
-  },
   "env": {
     "NEXT_TELEMETRY_DISABLED": "1"
   }

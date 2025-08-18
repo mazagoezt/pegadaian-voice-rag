@@ -7,7 +7,7 @@ let INDEX: Doc[] = [];
 
 const EMBED_URL = "https://api.openai.com/v1/embeddings";
 const EMBED_MODEL = process.env.EMBED_MODEL || "text-embedding-3-large";
-const MAX_CRAWL = Number(process.env.MAX_CRAWL_URLS || 80);
+const MAX_CRAWL = Number(process.env.MAX_CRAWL_URLS || 40);
 const CHUNK_SIZE = Number(process.env.CHUNK_SIZE || 1200);
 const CHUNK_OVERLAP = Number(process.env.CHUNK_OVERLAP || 150);
 

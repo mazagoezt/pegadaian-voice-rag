@@ -42,7 +42,7 @@ export default function VoiceAgent() {
           instructions:
             "Kamu adalah asisten portofolio Pegadaian. Berbahasa Indonesia natural, ramah, dan ringkas. Jawab HANYA berdasarkan hasil fungsi search_company. Jika tidak ada data, katakan tidak tahu. Jangan menyebutkan sumber atau URL kecuali pengguna memintanya secara eksplisit.",
           modalities: ["audio","text"],
-          voice: "nova",
+          voice: "shimmer",
           tools: [
             {
               type: "function",

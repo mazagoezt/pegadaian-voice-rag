@@ -7,10 +7,10 @@ export type Fee = { url: string; title: string; label: string; value: string; un
 let INDEX: Doc[] = [];
 let FEES: Fee[] = [];
 
-const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36 KomoBot/1.0";
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36 KomoBot/1.1";
 const EMBED_URL = "https://api.openai.com/v1/embeddings";
 const EMBED_MODEL = process.env.EMBED_MODEL || "text-embedding-3-large";
-const MAX_CRAWL = Number(process.env.MAX_CRAWL_URLS || 40);
+const MAX_CRAWL = Number(process.env.MAX_CRAWL_URLS || 50);
 const CHUNK_SIZE = Number(process.env.CHUNK_SIZE || 1200);
 const CHUNK_OVERLAP = Number(process.env.CHUNK_OVERLAP || 150);
 
@@ -49,6 +49,26 @@ function pushFees(url: string, title: string, text: string) {
   }
 }
 
+function slug(s: string): string {
+  return (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function lexicalBoost(query: string, url: string, title: string): number {
+  const q = slug(query);
+  const titleSlug = slug(title);
+  const urlSlug = slug(url);
+  let boost = 0;
+  // Strong boost for exact phrase in URL slug
+  if (q.includes("pinjaman-serbaguna") && urlSlug.includes("pinjaman-serbaguna")) boost += 1.2;
+  // Generic token matches
+  const terms = q.split("-").filter(Boolean);
+  const inTitle = terms.filter(t => titleSlug.includes(t)).length;
+  const inUrl = terms.filter(t => urlSlug.includes(t)).length;
+  boost += Math.min(0.6, inTitle * 0.12);
+  boost += Math.min(0.8, inUrl * 0.16);
+  return boost;
+}
+
 async function discoverLinksFromHome(domain: string): Promise<string[]> {
   try {
     const res = await fetch(domain, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
@@ -62,7 +82,7 @@ async function discoverLinksFromHome(domain: string): Promise<string[]> {
       if (!href) return;
       try {
         const u = new URL(href, origin);
-        if (u.origin === origin && /(produk|product|layanan|service|tentang|about|faq|tabungan|emas|gadai|pembiayaan|investasi|simulasi|lokasi|hubungi|biaya|tarif|pinjaman)/i.test(u.pathname)) {
+        if (u.origin.endsWith("pegadaian.co.id") && /(produk|product|layanan|service|tentang|about|faq|tabungan|emas|gadai|pembiayaan|investasi|simulasi|lokasi|hubungi|biaya|tarif|pinjaman)/i.test(u.pathname)) {
           hrefs.add(u.toString());
         }
       } catch {}
@@ -73,43 +93,54 @@ async function discoverLinksFromHome(domain: string): Promise<string[]> {
 
 async function fetchSitemapUrls(domain: string): Promise<string[]> {
   const urls: Set<string> = new Set();
-  try {
-    const sm = new URL("/sitemap.xml", domain).toString();
-    const res = await fetch(sm, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
-    if (res.ok) {
-      const xml = await res.text();
-      const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
-      for (const u of locs) if (/(pegadaian\.co\.id|sahabat\.pegadaian\.co\.id)/.test(u)) urls.add(u);
-    }
-  } catch {}
-  try {
-    const robots = new URL("/robots.txt", domain).toString();
-    const rr = await fetch(robots, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
-    if (rr.ok) {
-      const txt = await rr.text();
-      const smLines = [...txt.matchAll(/sitemap:\s*(\S+)/gi)].map(m => m[1]);
-      for (const line of smLines) {
-        try {
-          const r2 = await fetch(line, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
-          if (r2.ok) {
-            const xml = await r2.text();
-            const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
-            for (const u of locs) if (/(pegadaian\.co\.id|sahabat\.pegadaian\.co\.id)/.test(u)) urls.add(u);
-          }
-        } catch {}
+  const tryFetchXml = async (u: string) => {
+    try {
+      const r = await fetch(u, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
+      if (r.ok) {
+        const xml = await r.text();
+        const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
+        for (const l of locs) if (/(pegadaian\.co\.id)/.test(new URL(l).hostname)) urls.add(l);
       }
+    } catch {}
+  };
+
+  // Try /sitemap.xml and robots.txt sitemap pointers
+  const candidates = [
+    new URL("/sitemap.xml", domain).toString(),
+    new URL("/robots.txt", domain).toString()
+  ];
+  for (const c of candidates) {
+    if (c.endsWith("robots.txt")) {
+      try {
+        const rr = await fetch(c, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
+        if (rr.ok) {
+          const txt = await rr.text();
+          const smLines = [...txt.matchAll(/sitemap:\s*(\S+)/gi)].map(m => m[1]);
+          for (const line of smLines) await tryFetchXml(line);
+        }
+      } catch {}
+    } else {
+      await tryFetchXml(c);
     }
-  } catch {}
+  }
+
+  // Homepage discovery
   const discovered = await discoverLinksFromHome(domain);
   for (const d of discovered) urls.add(d);
+
+  // Extra URLs
   const extra = (process.env.RAG_EXTRA_URLS || "").split(/\s*,\s*/).filter(Boolean);
   for (const e of extra) {
     try {
       const u = new URL(e);
-      if (/(pegadaian\.co\.id|sahabat\.pegadaian\.co\.id)/.test(u.hostname)) urls.add(u.toString());
+      if (u.hostname.endsWith("pegadaian.co.id")) urls.add(u.toString());
     } catch {}
   }
-  const origin = new URL(domain).origin;
+
+  // Seeds for both www and non-www
+  const host = new URL(domain).host;
+  const hostNoWww = host.replace(/^www\./, "");
+  const origins = new Set([`https://${hostNoWww}`, `https://www.${hostNoWww}`]);
   const seedsByHost: Record<string, string[]> = {
     "https://www.pegadaian.co.id": [
       "https://www.pegadaian.co.id/produk/gadai-emas",
@@ -119,25 +150,66 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
       "https://www.pegadaian.co.id/hubungi-kami",
       "https://www.pegadaian.co.id/lokasi-cabang"
     ],
+    "https://pegadaian.co.id": [
+      "https://pegadaian.co.id/produk/gadai-emas"
+    ],
     "https://www.sahabat.pegadaian.co.id": [
+      "https://www.sahabat.pegadaian.co.id/produk-pegadaian/pinjaman-serbaguna",
       "https://www.sahabat.pegadaian.co.id/produk-pegadaian/tabungan-emas",
       "https://www.sahabat.pegadaian.co.id/produk-pegadaian/gadai-dari-rumah",
-      "https://www.sahabat.pegadaian.co.id/produk-pegadaian/pinjaman-serbaguna",
       "https://www.sahabat.pegadaian.co.id/simulasi/simulasi-tabungan-emas"
+    ],
+    "https://sahabat.pegadaian.co.id": [
+      "https://sahabat.pegadaian.co.id/produk-pegadaian/pinjaman-serbaguna",
+      "https://sahabat.pegadaian.co.id/produk-pegadaian/tabungan-emas"
     ]
   };
-  const seeds = seedsByHost[origin] || [];
-  for (const s of seeds) urls.add(s);
+  for (const o of origins) {
+    for (const s of (seedsByHost[o] || [])) urls.add(s);
+  }
+
   if (urls.size === 0) urls.add(domain);
   return Array.from(urls);
 }
 
-async function fetchPageText(url: string) {
-  const html = await fetch(url, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any }).then(r => r.text());
+function scrapeTextWithFallback(html: string) {
   const $ = cheerio.load(html);
   const title = ($("meta[property='og:title']").attr("content") || $("title").text() || "").trim();
-  const mainText = $("main").text() || $("article").text() || $("body").text();
-  const content = (mainText || "").replace(/\s+/g, " ").trim();
+  let textBlocks: string[] = [];
+  const pick = (sel: string) => ($(sel).text() || "").replace(/\s+/g, " ").trim();
+
+  textBlocks.push(pick("main"));
+  textBlocks.push(pick("article"));
+  textBlocks.push(pick("body"));
+  textBlocks.push(pick("noscript"));
+  textBlocks.push(pick("h1, h2, h3, h4, h5, h6"));
+  textBlocks.push(pick("p, li"));
+
+  const metaDesc = ($("meta[name='description']").attr("content") || $("meta[property='og:description']").attr("content") || "").trim();
+  if (metaDesc) textBlocks.push(metaDesc);
+
+  $("script[type='application/ld+json']").each((_, el) => {
+    try {
+      const j = JSON.parse($(el).contents().text());
+      const items = Array.isArray(j) ? j : [j];
+      for (const it of items) {
+        if (typeof it === "object") {
+          if (it.description) textBlocks.push(String(it.description));
+          if (it.headline) textBlocks.push(String(it.headline));
+        }
+      }
+    } catch {}
+  });
+
+  const content = textBlocks.join(" ").replace(/\s+/g, " ").trim();
+  return { title: title || "", content };
+}
+
+async function fetchPageText(url: string) {
+  const html = await fetch(url, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any }).then(r => r.text());
+  const { title, content } = scrapeTextWithFallback(html);
+  // parse tables -> text lines for fees
+  const $ = cheerio.load(html);
   $("table").each((_, t) => {
     const rows: string[] = [];
     $(t).find("tr").each((_, tr) => {
@@ -146,6 +218,7 @@ async function fetchPageText(url: string) {
     });
     if (rows.length) pushFees(url, title || url, rows.join(". "));
   });
+  // also scan full text for fee lines
   pushFees(url, title || url, content);
   return { title: title || url, content };
 }
@@ -189,45 +262,22 @@ function cosine(a: number[], b: number[]): number {
 export async function searchRag(query: string, k = 6): Promise<Hit[]> {
   if (!INDEX.length) throw new Error("Index empty; call /api/rag/reindex first");
   const [qemb] = await embedBatch([query]);
-  const scored = INDEX.map(d => ({ d, score: cosine(d.embedding!, qemb) }))
+  const scored = INDEX.map(d => {
+      const boost = lexicalBoost(query, d.url, d.title);
+      const score = cosine(d.embedding!, qemb) + boost;
+      return { d, score };
+    })
     .sort((a, b) => b.score - a.score)
     .slice(0, k)
-    .map(({ d, score }) => ({ url: d.url, title: d.title, score, snippet: d.content.slice(0, 500) }));
+    .map(({ d, score }) => ({ url: d.url, title: d.title, score, snippet: d.content.slice(0, 600) }));
   return scored;
 }
 
-export function searchFees(query: string, hits?: Hit[]): Fee[] {
+export function searchFees(query: string): Fee[] {
   const q = (query || "").toLowerCase();
   const terms = q.split(/\s+/).filter(Boolean);
-  const feeKeywords = ["biaya","tarif","sewa","sewa modal","administrasi","penitipan","denda","bunga","margin","ujrah"];
-
-  const byLabel = (f: Fee) => feeKeywords.some(k => f.label.includes(k));
-  const byQueryAny = (f: Fee) => terms.some(w => (f.label + " " + (f.context || "")).toLowerCase().includes(w));
-  const byTitleUrl = (f: Fee) => terms.some(w => (f.title + " " + f.url).toLowerCase().includes(w));
-
-  const hasFeeTerm = feeKeywords.some(k => q.includes(k));
-
-  let candidates = FEES.slice();
-  if (hasFeeTerm) {
-    candidates = candidates.filter(f => byLabel(f) || byQueryAny(f) || byTitleUrl(f));
-  } else {
-    let filtered = candidates.filter(byTitleUrl);
-    if (hits && hits.length) {
-      const allowed = new Set(hits.map(h => h.url));
-      filtered = filtered.filter(f => allowed.has(f.url));
-    }
-    candidates = filtered;
-  }
-
-  const seen = new Set<string>();
-  const out: Fee[] = [];
-  for (const f of candidates) {
-    const key = f.url + "|" + f.label + "|" + f.value;
-    if (!seen.has(key)) {
-      seen.add(key);
-      out.push(f);
-      if (out.length >= 12) break;
-    }
-  }
-  return out;
+  return FEES.filter(f => {
+    const hay = (f.title + " " + f.label + " " + (f.context || "")).toLowerCase();
+    return terms.every(t => hay.includes(t));
+  }).slice(0, 12);
 }

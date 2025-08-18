@@ -9,7 +9,7 @@ export default function ReindexButton() {
     try {
       setLoading(true);
       setStatus("Membangun indeks...");
-      const res = await fetch("/api/rag/reindex", { method: "POST" });
+      const res = await fetch("/api/rag/reindex", { method: "POST", cache: "no-store" });
       const j = await res.json();
       if (j.ok) setStatus(`Sukses. Dokumen terindeks: ${j.docs}`);
       else setStatus(`Gagal: ${j.error || "unknown error"}`);

@@ -12,10 +12,21 @@ export default function VoiceAgent() {
 
   async function connect() {
     setStatus("Mengambil token sesi...");
-    const sess = await fetch("/api/realtime/session").then(r => r.json());
+
+    let sess: any = null;
+    let raw = "";
+    try {
+      const resp = await fetch("/api/realtime/session", { cache: "no-store" });
+      raw = await resp.text();
+      try { sess = JSON.parse(raw); } catch { sess = null; }
+    } catch (e: any) {
+      setStatus("Gagal memanggil /api/realtime/session: " + (e?.message || String(e)));
+      return;
+    }
     const EPHEMERAL_KEY = sess?.client_secret?.value;
     if (!EPHEMERAL_KEY) {
-      setStatus("Gagal ambil token.");
+      const msg = sess?.error || raw?.slice(0, 300) || "Tidak ada client_secret.value";
+      setStatus("Gagal ambil token: " + msg);
       return;
     }
 
@@ -35,30 +46,21 @@ export default function VoiceAgent() {
 
     dc.onopen = () => {
       setStatus("Terhubung — mendaftar instruksi & tools...");
-
       const sessionUpdate: OAIEvent = {
         type: "session.update",
         session: {
-          instructions:
-            "Kamu adalah asisten portofolio Pegadaian. Berbahasa Indonesia natural, ramah, dan ringkas. Jawab HANYA berdasarkan hasil fungsi search_company. Jika tidak ada data, katakan tidak tahu. Jangan menyebutkan sumber atau URL kecuali pengguna memintanya secara eksplisit.",
-          modalities: ["audio","text"],
+          instructions: "Kamu adalah asisten portofolio Pegadaian. Berbahasa Indonesia natural, ramah, dan ringkas. Jawab HANYA berdasarkan hasil fungsi search_company. Jika tidak ada data, katakan tidak tahu. Jangan menyebutkan sumber atau URL kecuali pengguna memintanya secara eksplisit.",
+          modalities: ["audio", "text"],
           voice: "shimmer",
-          tools: [
-            {
-              type: "function",
-              name: "search_company",
-              description: "Kembalikan ringkasan singkat dari domain resmi perusahaan berdasarkan query pengguna (tanpa URL).",
-              parameters: {
-                type: "object",
-                properties: { query: { type: "string" } },
-                required: ["query"]
-              }
-            }
-          ]
-        }
+          tools: [{
+            type: "function",
+            name: "search_company",
+            description: "Kembalikan ringkasan singkat dari domain resmi perusahaan berdasarkan query pengguna (tanpa URL).",
+            parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] }
+          }]
+        },
       };
       dc.send(JSON.stringify(sessionUpdate));
-
       setStatus("Silakan berbicara...");
       setConnected(true);
     };
@@ -73,17 +75,10 @@ export default function VoiceAgent() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ query: q })
           }).then(r => r.json());
-
-          const toolOut: OAIEvent = {
-            type: "tool_output",
-            tool_call_id: msg.id,
-            output: res?.text || ""
-          };
+          const toolOut: OAIEvent = { type: "tool_output", tool_call_id: msg.id, output: res?.text || "" };
           dc.send(JSON.stringify(toolOut));
         }
-      } catch {
-        // ignore
-      }
+      } catch { /* ignore non-JSON */ }
     };
 
     const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -92,7 +87,7 @@ export default function VoiceAgent() {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    const model = "gpt-4o-realtime-preview-2024-12-17";
+    const model = "gpt-4o-realtime-preview";
     const sdp = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
       method: "POST",
       body: offer.sdp!,

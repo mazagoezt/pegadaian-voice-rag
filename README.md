@@ -30,3 +30,7 @@
 - Jangan expose `OPENAI_API_KEY` di client.
 - Hormati robots.txt & syarat layanan situs.
 - Untuk skala produksi: gunakan vector DB, scheduler reindex, dan caching.
+
+## Health Check
+- Buka `/api/health` untuk memastikan ENV terbaca di server (OPENAI_API_KEY harus `present`).
+- Buka `/api/realtime/session` untuk melihat JSON; jika ada `error`, periksa pesan lengkapnya.

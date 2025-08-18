@@ -38,7 +38,7 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
 
 function pushFees(url: string, title: string, text: string) {
   const lines = (text || "").split(/(?<=\.)\s+/);
-  const keyRe = /(biaya|tarif|sewa modal|administrasi|penitipan|layanan|pembukaan|penutupan|transfer|denda)/i;
+  const keyRe = /(biaya|tarif|sewa modal|bunga|margin|ujrah|administrasi|penitipan|layanan|pembukaan|penutupan|transfer|denda)/i;
   const valRe = /(rp\s?[:.]?\s?[0-9\.\,]+|[0-9]+\s?%|[0-9]+\s?(ribu|juta)|\brp\b)/i;
   for (const ln of lines) {
     if (keyRe.test(ln) && valRe.test(ln)) {
@@ -62,7 +62,7 @@ async function discoverLinksFromHome(domain: string): Promise<string[]> {
       if (!href) return;
       try {
         const u = new URL(href, origin);
-        if (u.origin === origin && /(produk|product|layanan|service|tentang|about|faq|tabungan|emas|gadai|pembiayaan|investasi|simulasi|lokasi|hubungi|biaya|tarif)/i.test(u.pathname)) {
+        if (u.origin === origin && /(produk|product|layanan|service|tentang|about|faq|tabungan|emas|gadai|pembiayaan|investasi|simulasi|lokasi|hubungi|biaya|tarif|pinjaman)/i.test(u.pathname)) {
           hrefs.add(u.toString());
         }
       } catch {}
@@ -122,6 +122,7 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
     "https://www.sahabat.pegadaian.co.id": [
       "https://www.sahabat.pegadaian.co.id/produk-pegadaian/tabungan-emas",
       "https://www.sahabat.pegadaian.co.id/produk-pegadaian/gadai-dari-rumah",
+      "https://www.sahabat.pegadaian.co.id/produk-pegadaian/pinjaman-serbaguna",
       "https://www.sahabat.pegadaian.co.id/simulasi/simulasi-tabungan-emas"
     ]
   };
@@ -195,11 +196,38 @@ export async function searchRag(query: string, k = 6): Promise<Hit[]> {
   return scored;
 }
 
-export function searchFees(query: string): Fee[] {
+export function searchFees(query: string, hits?: Hit[]): Fee[] {
   const q = (query || "").toLowerCase();
   const terms = q.split(/\s+/).filter(Boolean);
-  return FEES.filter(f => {
-    const hay = (f.title + " " + f.label + " " + (f.context || "")).toLowerCase();
-    return terms.every(t => hay.includes(t));
-  }).slice(0, 12);
+  const feeKeywords = ["biaya","tarif","sewa","sewa modal","administrasi","penitipan","denda","bunga","margin","ujrah"];
+
+  const byLabel = (f: Fee) => feeKeywords.some(k => f.label.includes(k));
+  const byQueryAny = (f: Fee) => terms.some(w => (f.label + " " + (f.context || "")).toLowerCase().includes(w));
+  const byTitleUrl = (f: Fee) => terms.some(w => (f.title + " " + f.url).toLowerCase().includes(w));
+
+  const hasFeeTerm = feeKeywords.some(k => q.includes(k));
+
+  let candidates = FEES.slice();
+  if (hasFeeTerm) {
+    candidates = candidates.filter(f => byLabel(f) || byQueryAny(f) || byTitleUrl(f));
+  } else {
+    let filtered = candidates.filter(byTitleUrl);
+    if (hits && hits.length) {
+      const allowed = new Set(hits.map(h => h.url));
+      filtered = filtered.filter(f => allowed.has(f.url));
+    }
+    candidates = filtered;
+  }
+
+  const seen = new Set<string>();
+  const out: Fee[] = [];
+  for (const f of candidates) {
+    const key = f.url + "|" + f.label + "|" + f.value;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(f);
+      if (out.length >= 12) break;
+    }
+  }
+  return out;
 }

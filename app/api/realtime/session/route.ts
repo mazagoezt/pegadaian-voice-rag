@@ -9,9 +9,7 @@ export async function GET() {
   const apiKey = process.env.OPENAI_API_KEY;
   const org = process.env.OPENAI_ORG_ID; // optional
 
-  if (!apiKey) {
-    return NextResponse.json({ ok: false, error: "OPENAI_API_KEY not set on server." }, { status: 500 });
-  }
+  if (!apiKey) return NextResponse.json({ ok: false, error: "OPENAI_API_KEY not set on server." }, { status: 500 });
 
   const headers: Record<string,string> = {
     "Authorization": `Bearer ${apiKey}`,
@@ -25,16 +23,10 @@ export async function GET() {
       headers,
       body: JSON.stringify({ model, voice })
     });
-
     const text = await r.text();
-    if (!r.ok) {
-      return NextResponse.json({ ok: false, status: r.status, error: text }, { status: 500 });
-    }
-
+    if (!r.ok) return NextResponse.json({ ok: false, status: r.status, error: text }, { status: 500 });
     const j = JSON.parse(text);
-    if (!j?.client_secret?.value) {
-      return NextResponse.json({ ok: false, error: "No client_secret.value in response", raw: j }, { status: 500 });
-    }
+    if (!j?.client_secret?.value) return NextResponse.json({ ok: false, error: "No client_secret.value in response", raw: j }, { status: 500 });
     return NextResponse.json(j);
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 });

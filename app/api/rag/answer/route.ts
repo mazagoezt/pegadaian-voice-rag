@@ -10,22 +10,17 @@ export async function POST(req: NextRequest) {
 
   try {
     const hits = await searchRag(String(query), 6);
-    const fees = searchFees(String(query));
-    const contextText = hits.map((h, i) => `[#${i + 1}] ${h.title}\n---\n${h.snippet}`).join("\n\n");
-    const feesText = fees.length ? fees.map(f => `- ${f.label}: ${f.value}${f.unit ? " " + f.unit : ""}`).join("\n") : "";
-
+    const fees = searchFees(String(query), hits);
     if (fees.length) {
       const formatted = `Berikut rincian yang relevan:\n${fees.map(f => `• ${f.label}: ${f.value}${f.unit ? " " + f.unit : ""}`).join("\n")}\nCatatan: angka dapat berubah sewaktu-waktu.`;
       return NextResponse.json({ answer: formatted, raw: { fees, hits: hits.map(h => h.title) } });
     }
 
     const model = process.env.QA_MODEL || "gpt-4o-mini";
+    const contextText = hits.map((h, i) => `[#${i + 1}] ${h.title}\n---\n${h.snippet}`).join("\n\n");
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
+      headers: { "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
         temperature: 0.2,

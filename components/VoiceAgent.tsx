@@ -20,7 +20,6 @@ export default function VoiceAgent() {
   async function connect() {
     setStatus("Mengambil token sesi...");
 
-    // fetch ephemeral token
     let sess: any = null;
     let raw = "";
     try {
@@ -28,7 +27,7 @@ export default function VoiceAgent() {
       raw = await resp.text();
       try { sess = JSON.parse(raw); } catch { sess = null; }
     } catch (e: any) {
-      setStatus("Gagal memanggil /api/realtime/session: " + (e?.message || String(e)));
+      setStatus("Gagal memanggil /api/realtime/session: " + (e?.message || String(e) ));
       return;
     }
     const EPHEMERAL_KEY = sess?.client_secret?.value;
@@ -38,7 +37,6 @@ export default function VoiceAgent() {
       return;
     }
 
-    // mic permission
     let ms: MediaStream;
     try { ms = await navigator.mediaDevices.getUserMedia({ audio: true }); }
     catch (e: any) { setStatus("Izin mikrofon ditolak/tidak tersedia: " + (e?.message || String(e))); return; }
@@ -146,7 +144,7 @@ export default function VoiceAgent() {
         <span className="text-sm text-slate-600">{status}</span>
       </div>
       <audio ref={remoteAudioRef} />
-      <p className="text-xs text-slate-500">Tips: Tanyakan "Berapa tarif sewa modal gadai emas dan biaya administrasinya?"</p>
+      <p className="text-xs text-slate-500">Tips: Coba “pinjaman serbaguna biaya administrasi & sewa modal”</p>
     </div>
   );
 }

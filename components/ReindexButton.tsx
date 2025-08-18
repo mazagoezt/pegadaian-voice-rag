@@ -11,7 +11,7 @@ export default function ReindexButton() {
       setStatus("Membangun indeks...");
       const res = await fetch("/api/rag/reindex", { method: "POST", cache: "no-store" });
       const j = await res.json();
-      if (j.ok) setStatus(`Sukses. Dokumen terindeks: ${j.docs}`);
+      if (j.ok) setStatus(`Sukses. Dokumen terindeks: ${j.docs}${j.fees ? `, fee: ${j.fees}` : ""}`);
       else setStatus(`Gagal: ${j.error || "unknown error"}`);
     } catch (e: any) {
       setStatus("Gagal: " + (e?.message || String(e)));

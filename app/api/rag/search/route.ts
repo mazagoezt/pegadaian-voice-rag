@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   const { query } = await req.json();
   if (!query) return NextResponse.json({ error: "query required" }, { status: 400 });
   try {
-    const hits = await searchRag(String(query), 4);
+    const hits = await searchRag(String(query), 6);
     const text = hits.map((h, i) => `[#${i + 1}] ${h.title}\n---\n${h.snippet}`).join("\n\n");
     const sources = hits.map(h => ({ title: h.title, url: h.url }));
     return NextResponse.json({ text, sources });

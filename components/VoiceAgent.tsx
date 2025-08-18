@@ -20,7 +20,7 @@ export default function VoiceAgent() {
   async function connect() {
     setStatus("Mengambil token sesi...");
 
-    // 1) Ambil token sesi dengan timeout + parsing aman
+    // fetch ephemeral token
     let sess: any = null;
     let raw = "";
     try {
@@ -38,16 +38,11 @@ export default function VoiceAgent() {
       return;
     }
 
-    // 2) Minta izin mic dengan try/catch
+    // mic permission
     let ms: MediaStream;
-    try {
-      ms = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e: any) {
-      setStatus("Izin mikrofon ditolak atau tidak tersedia: " + (e?.message || String(e)));
-      return;
-    }
+    try { ms = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (e: any) { setStatus("Izin mikrofon ditolak/tidak tersedia: " + (e?.message || String(e))); return; }
 
-    // 3) Setup WebRTC
     const pc = new RTCPeerConnection();
     pcRef.current = pc;
 
@@ -67,16 +62,16 @@ export default function VoiceAgent() {
       const sessionUpdate: OAIEvent = {
         type: "session.update",
         session: {
-          instructions: "Kamu adalah asisten portofolio Pegadaian. Berbahasa Indonesia natural, ramah, dan ringkas. Jawab HANYA berdasarkan hasil fungsi search_company. Jika tidak ada data, katakan tidak tahu. Jangan menyebutkan sumber atau URL kecuali pengguna memintanya secara eksplisit.",
-          modalities: ["audio", "text"],
+          instructions: "Kamu adalah asisten portofolio Pegadaian. Berbahasa Indonesia natural, ramah, dan ringkas. Jawab HANYA berdasarkan hasil fungsi search_company. Jika tidak ada data, katakan tidak tahu. Jangan menyebutkan sumber atau URL kecuali pengguna memintanya secara eksplisit. Jika ada angka tarif/biaya, sebutkan angkanya eksplisit dengan satuan rupiah atau persen.",
+          modalities: ["audio","text"],
           voice: "shimmer",
           tools: [{
             type: "function",
             name: "search_company",
-            description: "Kembalikan ringkasan singkat dari domain resmi perusahaan berdasarkan query pengguna (tanpa URL).",
+            description: "Kembalikan jawaban ringkas dari domain resmi perusahaan berdasarkan query pengguna (tanpa URL).",
             parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] }
           }]
-        },
+        }
       };
       dc.send(JSON.stringify(sessionUpdate));
       setStatus("Silakan berbicara...");
@@ -88,15 +83,15 @@ export default function VoiceAgent() {
         const msg: OAIEvent = JSON.parse(e.data);
         if (msg.type === "tool_call" && msg.name === "search_company") {
           const q = msg?.arguments?.query || "";
-          const res = await fetch("/api/rag/search", {
+          const res = await fetch("/api/rag/answer", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ query: q })
           }).then(r => r.json());
-          const toolOut: OAIEvent = { type: "tool_output", tool_call_id: msg.id, output: res?.text || "" };
+          const toolOut: OAIEvent = { type: "tool_output", tool_call_id: msg.id, output: res?.answer || res?.text || "" };
           dc.send(JSON.stringify(toolOut));
         }
-      } catch { /* ignore non-JSON */ }
+      } catch {}
     };
 
     ms.getTracks().forEach((t) => pc.addTrack(t, ms));
@@ -116,10 +111,7 @@ export default function VoiceAgent() {
       sdp = await timeoutFetch(`https://api.openai.com/v1/realtime?model=${model}`, 12000, {
         method: "POST",
         body: offer.sdp!,
-        headers: {
-          Authorization: `Bearer ${EPHEMERAL_KEY}`,
-          "Content-Type": "application/sdp"
-        }
+        headers: { Authorization: `Bearer ${EPHEMERAL_KEY}`, "Content-Type": "application/sdp" }
       }).then(r => r.text());
     } catch (e: any) {
       setStatus("Gagal negosiasi Realtime API: " + (e?.message || String(e)));
@@ -154,7 +146,7 @@ export default function VoiceAgent() {
         <span className="text-sm text-slate-600">{status}</span>
       </div>
       <audio ref={remoteAudioRef} />
-      <p className="text-xs text-slate-500">Tips: Klik tombol di atas lalu izinkan mikrofon. Jika tetap gagal, cek /api/health dan /api/realtime/session.</p>
+      <p className="text-xs text-slate-500">Tips: Tanyakan "Berapa tarif sewa modal gadai emas dan biaya administrasinya?"</p>
     </div>
   );
 }

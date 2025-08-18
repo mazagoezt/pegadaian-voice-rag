@@ -2,8 +2,10 @@ import * as cheerio from "cheerio";
 
 export type Doc = { url: string; title: string; content: string; embedding?: number[] };
 export type Hit = { url: string; title: string; snippet: string; score: number };
+export type Fee = { url: string; title: string; label: string; value: string; unit?: string; context?: string };
 
 let INDEX: Doc[] = [];
+let FEES: Fee[] = [];
 
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36 KomoBot/1.0";
 const EMBED_URL = "https://api.openai.com/v1/embeddings";
@@ -26,15 +28,25 @@ function splitToChunks(text: string, size = CHUNK_SIZE, overlap = CHUNK_OVERLAP)
 export async function embedBatch(texts: string[]): Promise<number[][]> {
   const r = await fetch(EMBED_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({ model: EMBED_MODEL, input: texts }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({ model: EMBED_MODEL, input: texts })
   });
   if (!r.ok) throw new Error("Embedding failed");
   const j = await r.json();
   return j.data.map((d: any) => d.embedding);
+}
+
+function pushFees(url: string, title: string, text: string) {
+  const lines = (text || "").split(/(?<=\.)\s+/);
+  const keyRe = /(biaya|tarif|sewa modal|administrasi|penitipan|layanan|pembukaan|penutupan|transfer|denda)/i;
+  const valRe = /(rp\s?[:.]?\s?[0-9\.\,]+|[0-9]+\s?%|[0-9]+\s?(ribu|juta)|\brp\b)/i;
+  for (const ln of lines) {
+    if (keyRe.test(ln) && valRe.test(ln)) {
+      const label = (ln.match(keyRe) || [""])[0];
+      const value = (ln.match(valRe) || [""])[0];
+      FEES.push({ url, title, label: label.toLowerCase(), value, unit: /%/.test(value) ? "%" : undefined, context: ln.trim().slice(0, 240) });
+    }
+  }
 }
 
 async function discoverLinksFromHome(domain: string): Promise<string[]> {
@@ -50,20 +62,17 @@ async function discoverLinksFromHome(domain: string): Promise<string[]> {
       if (!href) return;
       try {
         const u = new URL(href, origin);
-        if (u.origin === origin && /(produk|product|layanan|service|tentang|about|faq|tabungan|emas|gadai|pembiayaan|investasi|simulasi|lokasi|hubungi)/i.test(u.pathname)) {
+        if (u.origin === origin && /(produk|product|layanan|service|tentang|about|faq|tabungan|emas|gadai|pembiayaan|investasi|simulasi|lokasi|hubungi|biaya|tarif)/i.test(u.pathname)) {
           hrefs.add(u.toString());
         }
       } catch {}
     });
     return Array.from(hrefs);
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 async function fetchSitemapUrls(domain: string): Promise<string[]> {
   const urls: Set<string> = new Set();
-  // sitemap.xml
   try {
     const sm = new URL("/sitemap.xml", domain).toString();
     const res = await fetch(sm, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
@@ -73,7 +82,6 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
       for (const u of locs) if (/(pegadaian\.co\.id|sahabat\.pegadaian\.co\.id)/.test(u)) urls.add(u);
     }
   } catch {}
-  // robots.txt -> Sitemap
   try {
     const robots = new URL("/robots.txt", domain).toString();
     const rr = await fetch(robots, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
@@ -92,12 +100,15 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
       }
     }
   } catch {}
-  // discovery dari homepage
-  try {
-    const discovered = await discoverLinksFromHome(domain);
-    for (const d of discovered) urls.add(d);
-  } catch {}
-  // seeds kuat
+  const discovered = await discoverLinksFromHome(domain);
+  for (const d of discovered) urls.add(d);
+  const extra = (process.env.RAG_EXTRA_URLS || "").split(/\s*,\s*/).filter(Boolean);
+  for (const e of extra) {
+    try {
+      const u = new URL(e);
+      if (/(pegadaian\.co\.id|sahabat\.pegadaian\.co\.id)/.test(u.hostname)) urls.add(u.toString());
+    } catch {}
+  }
   const origin = new URL(domain).origin;
   const seedsByHost: Record<string, string[]> = {
     "https://www.pegadaian.co.id": [
@@ -117,8 +128,7 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
   const seeds = seedsByHost[origin] || [];
   for (const s of seeds) urls.add(s);
   if (urls.size === 0) urls.add(domain);
-  const filtered = Array.from(urls).filter(u => /(pegadaian\.co\.id|sahabat\.pegadaian\.co\.id)/.test(u));
-  return filtered;
+  return Array.from(urls);
 }
 
 async function fetchPageText(url: string) {
@@ -127,10 +137,20 @@ async function fetchPageText(url: string) {
   const title = ($("meta[property='og:title']").attr("content") || $("title").text() || "").trim();
   const mainText = $("main").text() || $("article").text() || $("body").text();
   const content = (mainText || "").replace(/\s+/g, " ").trim();
+  $("table").each((_, t) => {
+    const rows: string[] = [];
+    $(t).find("tr").each((_, tr) => {
+      const cells = $(tr).find("th,td").map((i, td) => $(td).text().trim()).get();
+      if (cells.length) rows.push(cells.join(" | "));
+    });
+    if (rows.length) pushFees(url, title || url, rows.join(". "));
+  });
+  pushFees(url, title || url, content);
   return { title: title || url, content };
 }
 
 export async function buildIndex() {
+  FEES = [];
   const domains = (process.env.ALLOWED_DOMAINS || "").split(/\s*,\s*/).filter(Boolean);
   if (!domains.length) throw new Error("ALLOWED_DOMAINS not set");
 
@@ -156,21 +176,30 @@ export async function buildIndex() {
   const embs = await embedBatch(pages.map(p => p.content));
   pages.forEach((p, i) => (p.embedding = embs[i]));
   INDEX = pages;
-  return { docs: INDEX.length };
+  return { docs: INDEX.length, fees: FEES.length };
 }
 
-function cosine(a: number[], b: number[]) {
+function cosine(a: number[], b: number[]): number {
   let dot = 0, na = 0, nb = 0;
   for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
-export async function searchRag(query: string, k = 4): Promise<Hit[]> {
+export async function searchRag(query: string, k = 6): Promise<Hit[]> {
   if (!INDEX.length) throw new Error("Index empty; call /api/rag/reindex first");
   const [qemb] = await embedBatch([query]);
   const scored = INDEX.map(d => ({ d, score: cosine(d.embedding!, qemb) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, k)
-    .map(({ d, score }) => ({ url: d.url, title: d.title, score, snippet: d.content.slice(0, 400) }));
+    .map(({ d, score }) => ({ url: d.url, title: d.title, score, snippet: d.content.slice(0, 500) }));
   return scored;
+}
+
+export function searchFees(query: string): Fee[] {
+  const q = (query || "").toLowerCase();
+  const terms = q.split(/\s+/).filter(Boolean);
+  return FEES.filter(f => {
+    const hay = (f.title + " " + f.label + " " + (f.context || "")).toLowerCase();
+    return terms.every(t => hay.includes(t));
+  }).slice(0, 12);
 }

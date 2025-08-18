@@ -8,13 +8,17 @@ export async function GET() {
   const model = process.env.REALTIME_MODEL || "gpt-4o-realtime-preview";
   const voice = process.env.REALTIME_VOICE || "shimmer";
   const domains = process.env.ALLOWED_DOMAINS || "";
+  const extra = process.env.RAG_EXTRA_URLS || "";
+  const qa = process.env.QA_MODEL || "gpt-4o-mini";
   return NextResponse.json({
     ok: true,
     env: {
       OPENAI_API_KEY: hasKey ? "present" : "missing",
       REALTIME_MODEL: model,
       REALTIME_VOICE: voice,
-      ALLOWED_DOMAINS: domains
+      ALLOWED_DOMAINS: domains,
+      RAG_EXTRA_URLS: extra,
+      QA_MODEL: qa
     }
   });
 }

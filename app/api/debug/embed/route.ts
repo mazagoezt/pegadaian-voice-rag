@@ -6,8 +6,9 @@ import { NextResponse } from "next/server";
 export async function GET() {
   const key = process.env.OPENAI_API_KEY;
   const model = process.env.EMBED_MODEL || "text-embedding-3-small";
-  if (!key) return NextResponse.json({ ok: false, error: "OPENAI_API_KEY missing" }, { status: 500 });
-
+  if (!key) {
+    return NextResponse.json({ ok: false, error: "OPENAI_API_KEY missing" }, { status: 500 });
+  }
   try {
     const r = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",

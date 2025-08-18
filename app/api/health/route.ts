@@ -10,6 +10,7 @@ export async function GET() {
   const domains = process.env.ALLOWED_DOMAINS || "";
   const extra = process.env.RAG_EXTRA_URLS || "";
   const qa = process.env.QA_MODEL || "gpt-4o-mini";
+  const extraCount = extra ? extra.split(/\s*,\s*/).filter(Boolean).length : 0;
   return NextResponse.json({
     ok: true,
     env: {
@@ -17,7 +18,7 @@ export async function GET() {
       REALTIME_MODEL: model,
       REALTIME_VOICE: voice,
       ALLOWED_DOMAINS: domains,
-      RAG_EXTRA_URLS: extra,
+      RAG_EXTRA_URLS_count: extraCount,
       QA_MODEL: qa
     }
   });

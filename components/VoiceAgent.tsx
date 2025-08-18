@@ -144,7 +144,7 @@ export default function VoiceAgent() {
         <span className="text-sm text-slate-600">{status}</span>
       </div>
       <audio ref={remoteAudioRef} />
-      <p className="text-xs text-slate-500">Tips: Coba “apa itu pinjaman serbaguna?”</p>
+      <p className="text-xs text-slate-500">Tips: “apa itu pinjaman serbaguna?” atau “biaya gadai emas apa saja?”</p>
     </div>
   );
 }

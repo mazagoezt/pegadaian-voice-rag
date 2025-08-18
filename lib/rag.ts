@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { scrapeWithFallback } from "@/lib/scrape";
 
 export type Doc = { url: string; title: string; content: string; embedding?: number[] };
 export type Hit = { url: string; title: string; snippet: string; score: number };
@@ -49,26 +50,6 @@ function pushFees(url: string, title: string, text: string) {
   }
 }
 
-function slug(s: string): string {
-  return (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
-function lexicalBoost(query: string, url: string, title: string): number {
-  const q = slug(query);
-  const titleSlug = slug(title);
-  const urlSlug = slug(url);
-  let boost = 0;
-  // Strong boost for exact phrase in URL slug
-  if (q.includes("pinjaman-serbaguna") && urlSlug.includes("pinjaman-serbaguna")) boost += 1.2;
-  // Generic token matches
-  const terms = q.split("-").filter(Boolean);
-  const inTitle = terms.filter(t => titleSlug.includes(t)).length;
-  const inUrl = terms.filter(t => urlSlug.includes(t)).length;
-  boost += Math.min(0.6, inTitle * 0.12);
-  boost += Math.min(0.8, inUrl * 0.16);
-  return boost;
-}
-
 async function discoverLinksFromHome(domain: string): Promise<string[]> {
   try {
     const res = await fetch(domain, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
@@ -104,7 +85,6 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
     } catch {}
   };
 
-  // Try /sitemap.xml and robots.txt sitemap pointers
   const candidates = [
     new URL("/sitemap.xml", domain).toString(),
     new URL("/robots.txt", domain).toString()
@@ -124,11 +104,9 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
     }
   }
 
-  // Homepage discovery
   const discovered = await discoverLinksFromHome(domain);
   for (const d of discovered) urls.add(d);
 
-  // Extra URLs
   const extra = (process.env.RAG_EXTRA_URLS || "").split(/\s*,\s*/).filter(Boolean);
   for (const e of extra) {
     try {
@@ -137,78 +115,13 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
     } catch {}
   }
 
-  // Seeds for both www and non-www
-  const host = new URL(domain).host;
-  const hostNoWww = host.replace(/^www\./, "");
-  const origins = new Set([`https://${hostNoWww}`, `https://www.${hostNoWww}`]);
-  const seedsByHost: Record<string, string[]> = {
-    "https://www.pegadaian.co.id": [
-      "https://www.pegadaian.co.id/produk/gadai-emas",
-      "https://www.pegadaian.co.id/produk/gadai-non-emas",
-      "https://www.pegadaian.co.id/produk/gadai-tabungan-emas",
-      "https://www.pegadaian.co.id/produk/titipan-emas-fisik",
-      "https://www.pegadaian.co.id/hubungi-kami",
-      "https://www.pegadaian.co.id/lokasi-cabang"
-    ],
-    "https://pegadaian.co.id": [
-      "https://pegadaian.co.id/produk/gadai-emas"
-    ],
-    "https://www.sahabat.pegadaian.co.id": [
-      "https://www.sahabat.pegadaian.co.id/produk-pegadaian/pinjaman-serbaguna",
-      "https://www.sahabat.pegadaian.co.id/produk-pegadaian/tabungan-emas",
-      "https://www.sahabat.pegadaian.co.id/produk-pegadaian/gadai-dari-rumah",
-      "https://www.sahabat.pegadaian.co.id/simulasi/simulasi-tabungan-emas"
-    ],
-    "https://sahabat.pegadaian.co.id": [
-      "https://sahabat.pegadaian.co.id/produk-pegadaian/pinjaman-serbaguna",
-      "https://sahabat.pegadaian.co.id/produk-pegadaian/tabungan-emas"
-    ]
-  };
-  for (const o of origins) {
-    for (const s of (seedsByHost[o] || [])) urls.add(s);
-  }
-
   if (urls.size === 0) urls.add(domain);
   return Array.from(urls);
 }
 
-function scrapeTextWithFallback(html: string) {
-  const $ = cheerio.load(html);
-  const title = ($("meta[property='og:title']").attr("content") || $("title").text() || "").trim();
-  let textBlocks: string[] = [];
-  const pick = (sel: string) => ($(sel).text() || "").replace(/\s+/g, " ").trim();
-
-  textBlocks.push(pick("main"));
-  textBlocks.push(pick("article"));
-  textBlocks.push(pick("body"));
-  textBlocks.push(pick("noscript"));
-  textBlocks.push(pick("h1, h2, h3, h4, h5, h6"));
-  textBlocks.push(pick("p, li"));
-
-  const metaDesc = ($("meta[name='description']").attr("content") || $("meta[property='og:description']").attr("content") || "").trim();
-  if (metaDesc) textBlocks.push(metaDesc);
-
-  $("script[type='application/ld+json']").each((_, el) => {
-    try {
-      const j = JSON.parse($(el).contents().text());
-      const items = Array.isArray(j) ? j : [j];
-      for (const it of items) {
-        if (typeof it === "object") {
-          if (it.description) textBlocks.push(String(it.description));
-          if (it.headline) textBlocks.push(String(it.headline));
-        }
-      }
-    } catch {}
-  });
-
-  const content = textBlocks.join(" ").replace(/\s+/g, " ").trim();
-  return { title: title || "", content };
-}
-
 async function fetchPageText(url: string) {
   const html = await fetch(url, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any }).then(r => r.text());
-  const { title, content } = scrapeTextWithFallback(html);
-  // parse tables -> text lines for fees
+  const { title, content } = scrapeWithFallback(html);
   const $ = cheerio.load(html);
   $("table").each((_, t) => {
     const rows: string[] = [];
@@ -218,7 +131,6 @@ async function fetchPageText(url: string) {
     });
     if (rows.length) pushFees(url, title || url, rows.join(". "));
   });
-  // also scan full text for fee lines
   pushFees(url, title || url, content);
   return { title: title || url, content };
 }
@@ -262,11 +174,7 @@ function cosine(a: number[], b: number[]): number {
 export async function searchRag(query: string, k = 6): Promise<Hit[]> {
   if (!INDEX.length) throw new Error("Index empty; call /api/rag/reindex first");
   const [qemb] = await embedBatch([query]);
-  const scored = INDEX.map(d => {
-      const boost = lexicalBoost(query, d.url, d.title);
-      const score = cosine(d.embedding!, qemb) + boost;
-      return { d, score };
-    })
+  const scored = INDEX.map(d => ({ d, score: cosine(d.embedding!, qemb) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, k)
     .map(({ d, score }) => ({ url: d.url, title: d.title, score, snippet: d.content.slice(0, 600) }));

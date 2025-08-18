@@ -1,13 +1,24 @@
-# Asisten Suara Pegadaian — v3.8.3
+# Asisten Suara Pegadaian — v3.9.1 (Canonical Context-Only)
 
-Perbaikan utama:
-- **Lexical boosting (URL & judul)** → halaman dengan slug `pinjaman-serbaguna` otomatis diprioritaskan.
-- **Fallback scraping** (meta description, headings, JSON-LD) → tetap dapat teks meski konten berbasis JS.
-- **Dual-host** `sahabat.pegadaian.co.id` (www & non-www) dalam seed.
-- **Mode definisi** untuk pertanyaan seperti “apa itu pinjaman serbaguna”.
+- **Canonical URL routing** dari `RAG_EXTRA_URLS` → jawaban produk/biaya disusun hanya dari halaman produk terpilih.
+- **Fallback** ke RAG jika tak ada padanan.
+- **Suara**: shimmer (wanita), **Bahasa**: Indonesia natural.
+- **Endpoint**: `/api/rag/answer`, `/api/rag/search`, `/api/rag/reindex`, `/api/realtime/session`, `/api/health`.
 
-Langkah uji:
-1) Set ENV `ALLOWED_DOMAINS=https://www.pegadaian.co.id,https://sahabat.pegadaian.co.id`
-2) Tambah `RAG_EXTRA_URLS=https://sahabat.pegadaian.co.id/produk-pegadaian/pinjaman-serbaguna`
-3) Deploy → buka `/api/health` → klik **Bangun/Refresh Indeks**
-4) Tes `/api/rag/answer` (POST) dengan body: `{"query":"apa itu pinjaman serbaguna"}`
+## ENV contoh
+```
+OPENAI_API_KEY=sk-...
+ALLOWED_DOMAINS=https://www.pegadaian.co.id,https://sahabat.pegadaian.co.id
+RAG_EXTRA_URLS=<daftar URL produk dipisah koma>
+QA_MODEL=gpt-4o-mini
+REALTIME_MODEL=gpt-4o-realtime-preview
+REALTIME_VOICE=shimmer
+```
+
+## Alur uji cepat
+1) Set ENV & deploy ke Vercel.
+2) Buka `/api/health` (cek `RAG_EXTRA_URLS_count`).
+3) Di halaman utama klik **Bangun/Refresh Indeks**.
+4) Coba:
+   - `{"query":"apa itu pinjaman serbaguna"}` → harus merangkum dari halaman *pinjaman-serbaguna*.
+   - `{"query":"biaya administrasi pinjaman serbaguna"}` → gunakan angka dari halaman tsb; jika tidak ada, jawab "belum tercantum".

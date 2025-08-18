@@ -1,24 +1,25 @@
-# Asisten Suara Pegadaian — v3.9.1 (Canonical Context-Only)
+# Pegadaian Voice RAG — v3.9.2 (Fix Embedding Failed)
 
-- **Canonical URL routing** dari `RAG_EXTRA_URLS` → jawaban produk/biaya disusun hanya dari halaman produk terpilih.
-- **Fallback** ke RAG jika tak ada padanan.
-- **Suara**: shimmer (wanita), **Bahasa**: Indonesia natural.
-- **Endpoint**: `/api/rag/answer`, `/api/rag/search`, `/api/rag/reindex`, `/api/realtime/session`, `/api/health`.
+Perubahan penting:
+- **Chunked embeddings** dengan retry (atur `EMBED_BATCH_SIZE`, default 64).
+- Pesan kesalahan dari OpenAI **diteruskan** (bukan generik), jadi mudah diagnosa.
+- **ONLY_EXTRA=true** → index **hanya** dari daftar `RAG_EXTRA_URLS` (lebih ringan & presisi).
+- Default **EMBED_MODEL=text-embedding-3-small**, **MAX_CRAWL_URLS=30**, **CHUNK_SIZE=900**.
 
 ## ENV contoh
 ```
 OPENAI_API_KEY=sk-...
 ALLOWED_DOMAINS=https://www.pegadaian.co.id,https://sahabat.pegadaian.co.id
-RAG_EXTRA_URLS=<daftar URL produk dipisah koma>
-QA_MODEL=gpt-4o-mini
-REALTIME_MODEL=gpt-4o-realtime-preview
-REALTIME_VOICE=shimmer
+RAG_EXTRA_URLS=<daftar URL>
+ONLY_EXTRA=true
+EMBED_MODEL=text-embedding-3-small
+EMBED_BATCH_SIZE=48
+MAX_CRAWL_URLS=24
+CHUNK_SIZE=900
+CHUNK_OVERLAP=120
 ```
 
-## Alur uji cepat
-1) Set ENV & deploy ke Vercel.
-2) Buka `/api/health` (cek `RAG_EXTRA_URLS_count`).
-3) Di halaman utama klik **Bangun/Refresh Indeks**.
-4) Coba:
-   - `{"query":"apa itu pinjaman serbaguna"}` → harus merangkum dari halaman *pinjaman-serbaguna*.
-   - `{"query":"biaya administrasi pinjaman serbaguna"}` → gunakan angka dari halaman tsb; jika tidak ada, jawab "belum tercantum".
+## Uji cepat
+1) Set ENV seperti di atas, **redeploy**.
+2) GET `/api/health` → pastikan `OPENAI_API_KEY:"present"` dan jumlah `RAG_EXTRA_URLS` sesuai.
+3) POST `/api/rag/reindex` → jika gagal, respons akan menampilkan detail HTTP dari endpoint embeddings.

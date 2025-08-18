@@ -8,12 +8,14 @@ export type Fee = { url: string; title: string; label: string; value: string; un
 let INDEX: Doc[] = [];
 let FEES: Fee[] = [];
 
-const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36 KomoBot/1.1";
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36 KomoBot/1.2";
 const EMBED_URL = "https://api.openai.com/v1/embeddings";
-const EMBED_MODEL = process.env.EMBED_MODEL || "text-embedding-3-large";
-const MAX_CRAWL = Number(process.env.MAX_CRAWL_URLS || 50);
-const CHUNK_SIZE = Number(process.env.CHUNK_SIZE || 1200);
-const CHUNK_OVERLAP = Number(process.env.CHUNK_OVERLAP || 150);
+const EMBED_MODEL = process.env.EMBED_MODEL || "text-embedding-3-small"; // default -> small to reduce quota/size
+const BATCH = Math.max(1, Math.min(128, Number(process.env.EMBED_BATCH_SIZE || 64)));
+const MAX_CRAWL = Math.max(1, Number(process.env.MAX_CRAWL_URLS || 30));
+const CHUNK_SIZE = Math.max(400, Number(process.env.CHUNK_SIZE || 900));
+const CHUNK_OVERLAP = Math.max(60, Number(process.env.CHUNK_OVERLAP || 120));
+const ONLY_EXTRA = String(process.env.ONLY_EXTRA || "false").toLowerCase() === "true";
 
 function splitToChunks(text: string, size = CHUNK_SIZE, overlap = CHUNK_OVERLAP): string[] {
   const clean = (text || "").replace(/\s+/g, " ").trim();
@@ -23,18 +25,39 @@ function splitToChunks(text: string, size = CHUNK_SIZE, overlap = CHUNK_OVERLAP)
     out.push(clean.slice(i, i + size));
     if (i + size >= clean.length) break;
   }
-  return out;
+  return out.slice(0, 50); // guard: cap chunks per page
 }
 
-export async function embedBatch(texts: string[]): Promise<number[][]> {
+async function embedChunk(inputs: string[]): Promise<number[][]> {
   const r = await fetch(EMBED_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-    body: JSON.stringify({ model: EMBED_MODEL, input: texts })
+    body: JSON.stringify({ model: EMBED_MODEL, input: inputs })
   });
-  if (!r.ok) throw new Error("Embedding failed");
-  const j = await r.json();
+  const text = await r.text();
+  if (!r.ok) throw new Error(`Embedding failed: HTTP ${r.status} — ${text.slice(0, 400)}`);
+  const j = JSON.parse(text);
   return j.data.map((d: any) => d.embedding);
+}
+
+export async function embedBatch(texts: string[]): Promise<number[][]> {
+  const out: number[][] = [];
+  for (let i = 0; i < texts.length; i += BATCH) {
+    const slice = texts.slice(i, i + BATCH);
+    let tries = 0;
+    while (true) {
+      try {
+        const embs = await embedChunk(slice);
+        out.push(...embs);
+        break;
+      } catch (e: any) {
+        tries += 1;
+        if (tries >= 4) throw e;
+        await new Promise(r => setTimeout(r, 500 * tries));
+      }
+    }
+  }
+  return out;
 }
 
 function pushFees(url: string, title: string, text: string) {
@@ -63,7 +86,7 @@ async function discoverLinksFromHome(domain: string): Promise<string[]> {
       if (!href) return;
       try {
         const u = new URL(href, origin);
-        if (u.origin.endsWith("pegadaian.co.id") && /(produk|product|layanan|service|tentang|about|faq|tabungan|emas|gadai|pembiayaan|investasi|simulasi|lokasi|hubungi|biaya|tarif|pinjaman)/i.test(u.pathname)) {
+        if (u.origin.endsWith("pegadaian.co.id") && /(produk|product|layanan|service|faq|tabungan|emas|gadai|pembiayaan|investasi|simulasi|lokasi|hubungi|biaya|tarif|pinjaman)/i.test(u.pathname)) {
           hrefs.add(u.toString());
         }
       } catch {}
@@ -74,47 +97,37 @@ async function discoverLinksFromHome(domain: string): Promise<string[]> {
 
 async function fetchSitemapUrls(domain: string): Promise<string[]> {
   const urls: Set<string> = new Set();
-  const tryFetchXml = async (u: string) => {
+  if (!ONLY_EXTRA) {
     try {
-      const r = await fetch(u, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
-      if (r.ok) {
-        const xml = await r.text();
+      const res = await fetch(new URL("/sitemap.xml", domain).toString(), { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
+      if (res.ok) {
+        const xml = await res.text();
         const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
-        for (const l of locs) if (/(pegadaian\.co\.id)/.test(new URL(l).hostname)) urls.add(l);
+        for (const u of locs) if (/(pegadaian\.co\.id)/.test(new URL(u).hostname)) urls.add(u);
       }
     } catch {}
-  };
-
-  const candidates = [
-    new URL("/sitemap.xml", domain).toString(),
-    new URL("/robots.txt", domain).toString()
-  ];
-  for (const c of candidates) {
-    if (c.endsWith("robots.txt")) {
-      try {
-        const rr = await fetch(c, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
-        if (rr.ok) {
-          const txt = await rr.text();
-          const smLines = [...txt.matchAll(/sitemap:\s*(\S+)/gi)].map(m => m[1]);
-          for (const line of smLines) await tryFetchXml(line);
-        }
-      } catch {}
-    } else {
-      await tryFetchXml(c);
-    }
-  }
-
-  const discovered = await discoverLinksFromHome(domain);
-  for (const d of discovered) urls.add(d);
-
-  const extra = (process.env.RAG_EXTRA_URLS || "").split(/\s*,\s*/).filter(Boolean);
-  for (const e of extra) {
     try {
-      const u = new URL(e);
-      if (u.hostname.endsWith("pegadaian.co.id")) urls.add(u.toString());
+      const rr = await fetch(new URL("/robots.txt", domain).toString(), { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
+      if (rr.ok) {
+        const txt = await rr.text();
+        const smLines = [...txt.matchAll(/sitemap:\s*(\S+)/gi)].map(m => m[1]);
+        for (const line of smLines) {
+          try {
+            const r2 = await fetch(line, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
+            if (r2.ok) {
+              const xml = await r2.text();
+              const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
+              for (const u of locs) if (/(pegadaian\.co\.id)/.test(new URL(u).hostname)) urls.add(u);
+            }
+          } catch {}
+        }
+      }
     } catch {}
+    const discovered = await discoverLinksFromHome(domain);
+    for (const d of discovered) urls.add(d);
   }
-
+  const extra = (process.env.RAG_EXTRA_URLS || "").split(/\s*,\s*/).filter(Boolean);
+  for (const e of extra) { try { const u = new URL(e); if (u.hostname.endsWith("pegadaian.co.id")) urls.add(u.toString()); } catch {} }
   if (urls.size === 0) urls.add(domain);
   return Array.from(urls);
 }
@@ -159,8 +172,14 @@ export async function buildIndex() {
   }
   if (!pages.length) throw new Error("No pages fetched");
 
-  const embs = await embedBatch(pages.map(p => p.content));
-  pages.forEach((p, i) => (p.embedding = embs[i]));
+  // CHUNKED EMBEDDING with retries
+  try {
+    const embs = await embedBatch(pages.map(p => p.content));
+    pages.forEach((p, i) => (p.embedding = embs[i]));
+  } catch (e: any) {
+    throw new Error(String(e?.message || e));
+  }
+
   INDEX = pages;
   return { docs: INDEX.length, fees: FEES.length };
 }

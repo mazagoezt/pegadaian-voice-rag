@@ -1,25 +1,18 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const hasKey = !!process.env.OPENAI_API_KEY;
-  const model = process.env.REALTIME_MODEL || "gpt-4o-realtime-preview";
-  const voice = process.env.REALTIME_VOICE || "shimmer";
-  const domains = process.env.ALLOWED_DOMAINS || "";
-  const extra = process.env.RAG_EXTRA_URLS || "";
-  const qa = process.env.QA_MODEL || "gpt-4o-mini";
-  const extraCount = extra ? extra.split(/\s*,\s*/).filter(Boolean).length : 0;
-  return NextResponse.json({
-    ok: true,
-    env: {
-      OPENAI_API_KEY: hasKey ? "present" : "missing",
-      REALTIME_MODEL: model,
-      REALTIME_VOICE: voice,
-      ALLOWED_DOMAINS: domains,
-      RAG_EXTRA_URLS_count: extraCount,
-      QA_MODEL: qa
-    }
-  });
+  const env = {
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? "present" : "missing",
+    EMBED_MODEL: process.env.EMBED_MODEL || "text-embedding-3-small",
+    EMBED_BATCH_SIZE: process.env.EMBED_BATCH_SIZE || "64",
+    MAX_CRAWL_URLS: process.env.MAX_CRAWL_URLS || "30",
+    CHUNK_SIZE: process.env.CHUNK_SIZE || "900",
+    CHUNK_OVERLAP: process.env.CHUNK_OVERLAP || "120",
+    ONLY_EXTRA: process.env.ONLY_EXTRA || "false",
+    ALLOWED_DOMAINS: process.env.ALLOWED_DOMAINS || "",
+    RAG_EXTRA_URLS: (process.env.RAG_EXTRA_URLS || "").split(/\s*,\s*/).filter(Boolean).length
+  };
+  return NextResponse.json({ ok: true, env });
 }

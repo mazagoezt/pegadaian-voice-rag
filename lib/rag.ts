@@ -171,11 +171,6 @@ export async function searchRag(query: string, k = 4): Promise<Hit[]> {
   const scored = INDEX.map(d => ({ d, score: cosine(d.embedding!, qemb) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, k)
-    .map(({ d, score }) => ({
-      url: d.url,
-      title: d.title,
-      score,
-      snippet: d.content.slice(0, 400)
-    }));
+    .map(({ d, score }) => ({ url: d.url, title: d.title, score, snippet: d.content.slice(0, 400) }));
   return scored;
 }

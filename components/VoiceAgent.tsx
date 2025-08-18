@@ -3,6 +3,13 @@ import { useState, useRef } from "react";
 
 type OAIEvent = { type: string; [k: string]: any };
 
+function timeoutFetch(input: RequestInfo, ms = 12000, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  const merged: RequestInit = { ...(init || {}), signal: controller.signal };
+  return fetch(input, merged).finally(() => clearTimeout(id));
+}
+
 export default function VoiceAgent() {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState("Siap");
@@ -13,10 +20,11 @@ export default function VoiceAgent() {
   async function connect() {
     setStatus("Mengambil token sesi...");
 
+    // 1) Ambil token sesi dengan timeout + parsing aman
     let sess: any = null;
     let raw = "";
     try {
-      const resp = await fetch("/api/realtime/session", { cache: "no-store" });
+      const resp = await timeoutFetch("/api/realtime/session", 12000, { cache: "no-store" });
       raw = await resp.text();
       try { sess = JSON.parse(raw); } catch { sess = null; }
     } catch (e: any) {
@@ -30,6 +38,16 @@ export default function VoiceAgent() {
       return;
     }
 
+    // 2) Minta izin mic dengan try/catch
+    let ms: MediaStream;
+    try {
+      ms = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e: any) {
+      setStatus("Izin mikrofon ditolak atau tidak tersedia: " + (e?.message || String(e)));
+      return;
+    }
+
+    // 3) Setup WebRTC
     const pc = new RTCPeerConnection();
     pcRef.current = pc;
 
@@ -81,23 +99,39 @@ export default function VoiceAgent() {
       } catch { /* ignore non-JSON */ }
     };
 
-    const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
     ms.getTracks().forEach((t) => pc.addTrack(t, ms));
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+    let offer: RTCSessionDescriptionInit;
+    try {
+      offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+    } catch (e: any) {
+      setStatus("Gagal membuat offer WebRTC: " + (e?.message || String(e)));
+      return;
+    }
 
-    const model = "gpt-4o-realtime-preview";
-    const sdp = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
-      method: "POST",
-      body: offer.sdp!,
-      headers: {
-        Authorization: `Bearer ${EPHEMERAL_KEY}`,
-        "Content-Type": "application/sdp"
-      }
-    }).then(r => r.text());
+    let sdp = "";
+    try {
+      const model = "gpt-4o-realtime-preview";
+      sdp = await timeoutFetch(`https://api.openai.com/v1/realtime?model=${model}`, 12000, {
+        method: "POST",
+        body: offer.sdp!,
+        headers: {
+          Authorization: `Bearer ${EPHEMERAL_KEY}`,
+          "Content-Type": "application/sdp"
+        }
+      }).then(r => r.text());
+    } catch (e: any) {
+      setStatus("Gagal negosiasi Realtime API: " + (e?.message || String(e)));
+      return;
+    }
 
-    await pc.setRemoteDescription({ type: "answer", sdp });
+    try {
+      await pc.setRemoteDescription({ type: "answer", sdp });
+    } catch (e: any) {
+      setStatus("Gagal set remote description: " + (e?.message || String(e)));
+      return;
+    }
   }
 
   async function disconnect() {
@@ -120,7 +154,7 @@ export default function VoiceAgent() {
         <span className="text-sm text-slate-600">{status}</span>
       </div>
       <audio ref={remoteAudioRef} />
-      <p className="text-xs text-slate-500">Tips: Tanyakan "Apa saja produk Tabungan Emas dan biayanya?"</p>
+      <p className="text-xs text-slate-500">Tips: Klik tombol di atas lalu izinkan mikrofon. Jika tetap gagal, cek /api/health dan /api/realtime/session.</p>
     </div>
   );
 }

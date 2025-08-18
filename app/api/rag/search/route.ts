@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   try {
     const hits = await searchRag(String(query), 4);
     const text = hits.map((h, i) => `[#${i + 1}] ${h.title}\n---\n${h.snippet}`).join("\n\n");
-    const sources = hits.map(h => ({ title: h.title, url: h.url })); // kept for debug if needed
+    const sources = hits.map(h => ({ title: h.title, url: h.url }));
     return NextResponse.json({ text, sources });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });

@@ -1,9 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
 import { NextResponse } from "next/server";
 import { buildIndex } from "@/lib/rag";
-
 export async function POST() {
   try {
     const info = await buildIndex();

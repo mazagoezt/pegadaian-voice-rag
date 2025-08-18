@@ -10,12 +10,12 @@ let FEES: Fee[] = [];
 
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36 KomoBot/1.2";
 const EMBED_URL = "https://api.openai.com/v1/embeddings";
-const EMBED_MODEL = process.env.EMBED_MODEL || "text-embedding-3-small"; // default -> small to reduce quota/size
-const BATCH = Math.max(1, Math.min(128, Number(process.env.EMBED_BATCH_SIZE || 64)));
-const MAX_CRAWL = Math.max(1, Number(process.env.MAX_CRAWL_URLS || 30));
+const EMBED_MODEL = process.env.EMBED_MODEL || "text-embedding-3-small";
+const BATCH = Math.max(1, Math.min(128, Number(process.env.EMBED_BATCH_SIZE || 48)));
+const MAX_CRAWL = Math.max(1, Number(process.env.MAX_CRAWL_URLS || 20));
 const CHUNK_SIZE = Math.max(400, Number(process.env.CHUNK_SIZE || 900));
 const CHUNK_OVERLAP = Math.max(60, Number(process.env.CHUNK_OVERLAP || 120));
-const ONLY_EXTRA = String(process.env.ONLY_EXTRA || "false").toLowerCase() === "true";
+const ONLY_EXTRA = String(process.env.ONLY_EXTRA || "true").toLowerCase() === "true";
 
 function splitToChunks(text: string, size = CHUNK_SIZE, overlap = CHUNK_OVERLAP): string[] {
   const clean = (text || "").replace(/\s+/g, " ").trim();
@@ -25,7 +25,7 @@ function splitToChunks(text: string, size = CHUNK_SIZE, overlap = CHUNK_OVERLAP)
     out.push(clean.slice(i, i + size));
     if (i + size >= clean.length) break;
   }
-  return out.slice(0, 50); // guard: cap chunks per page
+  return out.slice(0, 40);
 }
 
 async function embedChunk(inputs: string[]): Promise<number[][]> {
@@ -46,15 +46,8 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
     const slice = texts.slice(i, i + BATCH);
     let tries = 0;
     while (true) {
-      try {
-        const embs = await embedChunk(slice);
-        out.push(...embs);
-        break;
-      } catch (e: any) {
-        tries += 1;
-        if (tries >= 4) throw e;
-        await new Promise(r => setTimeout(r, 500 * tries));
-      }
+      try { out.push(...(await embedChunk(slice))); break; }
+      catch (e) { tries += 1; if (tries >= 4) throw e; await new Promise(r => setTimeout(r, 500 * tries)); }
     }
   }
   return out;
@@ -64,12 +57,10 @@ function pushFees(url: string, title: string, text: string) {
   const lines = (text || "").split(/(?<=\.)\s+/);
   const keyRe = /(biaya|tarif|sewa modal|bunga|margin|ujrah|administrasi|penitipan|layanan|pembukaan|penutupan|transfer|denda)/i;
   const valRe = /(rp\s?[:.]?\s?[0-9\.\,]+|[0-9]+\s?%|[0-9]+\s?(ribu|juta)|\brp\b)/i;
-  for (const ln of lines) {
-    if (keyRe.test(ln) && valRe.test(ln)) {
-      const label = (ln.match(keyRe) || [""])[0];
-      const value = (ln.match(valRe) || [""])[0];
-      FEES.push({ url, title, label: label.toLowerCase(), value, unit: /%/.test(value) ? "%" : undefined, context: ln.trim().slice(0, 240) });
-    }
+  for (const ln of lines) if (keyRe.test(ln) && valRe.test(ln)) {
+    const label = (ln.match(keyRe) || [""])[0];
+    const value = (ln.match(valRe) || [""])[0];
+    FEES.push({ url, title, label: label.toLowerCase(), value, unit: /%/.test(value) ? "%" : undefined, context: ln.trim().slice(0, 240) });
   }
 }
 
@@ -83,7 +74,6 @@ async function discoverLinksFromHome(domain: string): Promise<string[]> {
     const hrefs = new Set<string>();
     $("a[href]").each((_, el) => {
       const href = String($(el).attr("href") || "").trim();
-      if (!href) return;
       try {
         const u = new URL(href, origin);
         if (u.origin.endsWith("pegadaian.co.id") && /(produk|product|layanan|service|faq|tabungan|emas|gadai|pembiayaan|investasi|simulasi|lokasi|hubungi|biaya|tarif|pinjaman)/i.test(u.pathname)) {
@@ -99,28 +89,11 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
   const urls: Set<string> = new Set();
   if (!ONLY_EXTRA) {
     try {
-      const res = await fetch(new URL("/sitemap.xml", domain).toString(), { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
-      if (res.ok) {
-        const xml = await res.text();
+      const r = await fetch(new URL("/sitemap.xml", domain).toString(), { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
+      if (r.ok) {
+        const xml = await r.text();
         const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
         for (const u of locs) if (/(pegadaian\.co\.id)/.test(new URL(u).hostname)) urls.add(u);
-      }
-    } catch {}
-    try {
-      const rr = await fetch(new URL("/robots.txt", domain).toString(), { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
-      if (rr.ok) {
-        const txt = await rr.text();
-        const smLines = [...txt.matchAll(/sitemap:\s*(\S+)/gi)].map(m => m[1]);
-        for (const line of smLines) {
-          try {
-            const r2 = await fetch(line, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" as any });
-            if (r2.ok) {
-              const xml = await r2.text();
-              const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
-              for (const u of locs) if (/(pegadaian\.co\.id)/.test(new URL(u).hostname)) urls.add(u);
-            }
-          } catch {}
-        }
       }
     } catch {}
     const discovered = await discoverLinksFromHome(domain);
@@ -172,14 +145,8 @@ export async function buildIndex() {
   }
   if (!pages.length) throw new Error("No pages fetched");
 
-  // CHUNKED EMBEDDING with retries
-  try {
-    const embs = await embedBatch(pages.map(p => p.content));
-    pages.forEach((p, i) => (p.embedding = embs[i]));
-  } catch (e: any) {
-    throw new Error(String(e?.message || e));
-  }
-
+  const embs = await embedBatch(pages.map(p => p.content));
+  pages.forEach((p, i) => (p.embedding = embs[i]));
   INDEX = pages;
   return { docs: INDEX.length, fees: FEES.length };
 }

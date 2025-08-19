@@ -1,55 +1,39 @@
 "use client";
 import { useState, useRef } from "react";
 type OAIEvent = { type: string; [k: string]: any };
-
 function timeoutFetch(input: RequestInfo, ms = 12000, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
   const merged: RequestInit = { ...(init || {}), signal: controller.signal };
   return fetch(input, merged).finally(() => clearTimeout(id));
 }
-
 export default function VoiceAgent() {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState("Siap");
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
-
   async function connect() {
     setStatus("Mengambil token sesi...");
-    let sess: any = null;
-    let raw = "";
-    try {
-      const resp = await timeoutFetch("/api/realtime/session", 12000, { cache: "no-store" });
-      raw = await resp.text();
-      try { sess = JSON.parse(raw); } catch { sess = null; }
-    } catch (e: any) { setStatus("Gagal panggil /api/realtime/session: " + (e?.message || String(e))); return; }
+    let sess: any = null; let raw = "";
+    try { const resp = await timeoutFetch("/api/realtime/session", 12000, { cache: "no-store" }); raw = await resp.text(); try { sess = JSON.parse(raw); } catch {} }
+    catch (e: any) { setStatus("Gagal panggil /api/realtime/session: " + (e?.message || String(e))); return; }
     const EPHEMERAL_KEY = sess?.client_secret?.value;
     if (!EPHEMERAL_KEY) { setStatus("Gagal ambil token: " + (sess?.error || raw?.slice(0, 300))); return; }
-
-    let ms: MediaStream;
-    try { ms = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-    catch (e: any) { setStatus("Izin mikrofon ditolak/tidak tersedia: " + (e?.message || String(e))); return; }
-
+    let ms: MediaStream; try { ms = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e: any) { setStatus("Izin mikrofon ditolak: " + (e?.message || String(e))); return; }
     const pc = new RTCPeerConnection(); pcRef.current = pc;
-    pc.ontrack = (event) => {
-      const [stream] = event.streams;
-      if (remoteAudioRef.current) { remoteAudioRef.current.srcObject = stream; remoteAudioRef.current.play().catch(() => {}); }
-    };
-
+    pc.ontrack = (event) => { const [stream] = event.streams; if (remoteAudioRef.current) { remoteAudioRef.current.srcObject = stream; remoteAudioRef.current.play().catch(() => {}); } };
     const dc = pc.createDataChannel("oai-events"); dcRef.current = dc;
     dc.onopen = () => {
       setStatus("Terhubung — mendaftar tools...");
       const sessionUpdate: OAIEvent = {
         type: "session.update",
         session: {
-          instructions: "Kamu asisten portofolio Pegadaian. Bahasa Indonesia natural, ramah, ringkas. Jawab HANYA dari hasil fungsi search_company; jangan sebutkan sumber/URL kecuali diminta.",
+          instructions: "Kamu asisten Pegadaian. Bahasa Indonesia natural, ramah. Jawab HANYA berdasarkan fungsi search_company; jangan sebutkan sumber/URL.",
           modalities: ["audio","text"], voice: "shimmer",
           tools: [{
-            type: "function",
-            name: "search_company",
-            description: "Kembalikan jawaban ringkas dari domain resmi berdasarkan query pengguna (tanpa URL).",
+            type: "function", name: "search_company",
+            description: "Ringkas jawaban dari domain resmi berdasarkan query (tanpa URL).",
             parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] }
           }]
         }
@@ -69,30 +53,17 @@ export default function VoiceAgent() {
         }
       } catch {}
     };
-
     ms.getTracks().forEach((t) => pc.addTrack(t, ms));
-    let offer: RTCSessionDescriptionInit;
-    try { offer = await pc.createOffer(); await pc.setLocalDescription(offer); }
-    catch (e: any) { setStatus("Gagal membuat offer WebRTC: " + (e?.message || String(e))); return; }
-
-    let sdp = "";
-    try {
+    let offer: RTCSessionDescriptionInit; try { offer = await pc.createOffer(); await pc.setLocalDescription(offer); } catch (e: any) { setStatus("Gagal membuat offer WebRTC: " + (e?.message || String(e))); return; }
+    let sdp = ""; try {
       const model = "gpt-4o-realtime-preview";
       sdp = await timeoutFetch(`https://api.openai.com/v1/realtime?model=${model}`, 12000, {
         method: "POST", body: offer.sdp!, headers: { Authorization: `Bearer ${EPHEMERAL_KEY}`, "Content-Type": "application/sdp" }
       }).then(r => r.text());
     } catch (e: any) { setStatus("Gagal negosiasi Realtime API: " + (e?.message || String(e))); return; }
-
-    try { await pc.setRemoteDescription({ type: "answer", sdp }); }
-    catch (e: any) { setStatus("Gagal set remote description: " + (e?.message || String(e))); return; }
+    try { await pc.setRemoteDescription({ type: "answer", sdp }); } catch (e: any) { setStatus("Gagal set remote description: " + (e?.message || String(e))); return; }
   }
-
-  async function disconnect() {
-    dcRef.current?.close(); pcRef.current?.close();
-    dcRef.current = null; pcRef.current = null;
-    setConnected(false); setStatus("Terputus");
-  }
-
+  function disconnect() { dcRef.current?.close(); pcRef.current?.close(); dcRef.current = null; pcRef.current = null; setConnected(false); setStatus("Terputus"); }
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">

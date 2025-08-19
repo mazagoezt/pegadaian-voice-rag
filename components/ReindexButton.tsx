@@ -15,11 +15,11 @@ export default function ReindexButton() {
     finally { setLoading(false); }
   };
   return (
-    <div className="flex items-center gap-3">
+    <div className="space-y-2">
       <button onClick={run} disabled={loading} className="px-3 py-2 rounded-lg bg-amber-600 text-white">
         {loading ? "Memproses..." : "Bangun / Refresh Indeks"}
       </button>
-      <span className="text-xs text-slate-600">{status}</span>
+      <div className="text-xs text-slate-600">{status}</div>
     </div>
   );
 }

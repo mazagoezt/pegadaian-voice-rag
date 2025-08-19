@@ -1,7 +1,7 @@
 {
   "name": "pegadaian-voice-rag",
   "private": true,
-  "version": "3.9.6v",
+  "version": "3.9.6v2",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

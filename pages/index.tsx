@@ -4,14 +4,13 @@ import Link from "next/link";
 const VoiceAgent = dynamic(() => import("@/components/VoiceAgent"), { ssr: false });
 
 export const getServerSideProps = async () => {
-  // Force SSR so Vercel tidak melakukan static export/prerender.
-  return { props: {} };
+  return { props: {} }; // Force SSR: no SSG for "/"
 };
 
 export default function Home() {
   return (
     <main className="max-w-2xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Asisten Suara Portofolio Pegadaian — v3.9.6v</h1>
+      <h1 className="text-2xl font-bold">Asisten Suara Portofolio Pegadaian — v3.9.6v2 (Vercel)</h1>
       <p className="text-slate-700">Menu: <b>Hubungkan &amp; Bicara</b>, <b>Tanya</b>, <b>Bangun/Refresh Indeks</b>.</p>
 
       <section className="p-4 rounded-2xl border bg-white">

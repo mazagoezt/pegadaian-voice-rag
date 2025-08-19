@@ -9,7 +9,9 @@ export async function GET(){
   if (org) headers["OpenAI-Organization"] = org;
   try{ const r = await fetch("https://api.openai.com/v1/realtime/sessions",{ method:"POST", headers, body: JSON.stringify({ model, voice }) });
     const text = await r.text(); if(!r.ok) return NextResponse.json({ ok:false, status:r.status, error:text }, { status:500 });
-    const j = JSON.parse(text); if(!j?.client_secret?.value) return NextResponse.json({ ok:false, error:"No client_secret.value", raw:j }, { status:500 });
-    return NextResponse.json(j);
+    const j = JSON.parse(text);
+    if(!j?.client_secret?.value) return NextResponse.json({ ok:false, error:"No client_secret.value", raw:j }, { status:500 });
+    // echo back model used for session
+    return NextResponse.json({ ...j, session_model: model });
   } catch(e:any){ return NextResponse.json({ ok:false, error:e?.message || String(e) }, { status:500 }); }
 }

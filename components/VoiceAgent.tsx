@@ -49,6 +49,7 @@ export default function VoiceAgent() {
       return;
     }
     const EPHEMERAL_KEY = (sess as AnyObj)?.client_secret?.value;
+    const MODEL = (sess as AnyObj)?.session_model || (sess as AnyObj)?.model || "gpt-4o-realtime-preview";
     if (!EPHEMERAL_KEY) {
       setStatus("Gagal ambil token: " + ((sess as AnyObj)?.error || raw.slice(0, 300)));
       return;
@@ -96,7 +97,7 @@ export default function VoiceAgent() {
         }
       };
       dc.send(JSON.stringify(sessionUpdate));
-      setStatus("Silakan berbicara...");
+      setStatus("Silakan berbicara... (Model: " + MODEL + ")");
       setConnected(true);
     };
 
@@ -138,7 +139,7 @@ export default function VoiceAgent() {
 
     let sdp = "";
     try {
-      const model = "gpt-4o-realtime-preview";
+      const model = MODEL;
       const r = await fetch(`https://api.openai.com/v1/realtime?model=${model}&protocol=webrtc`, {
         method: "POST",
         body: offer.sdp || "",

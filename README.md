@@ -1,4 +1,4 @@
-# Pegadaian Voice RAG — v3.9.5
+# Pegadaian Voice RAG — v3.9.5b
 
 Fitur utama:
 - **Hubungkan & Bicara (Realtime WebRTC)** — suara `shimmer` (wanita), Indonesia natural, paksa tool-call ke RAG.

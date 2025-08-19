@@ -139,12 +139,14 @@ export default function VoiceAgent() {
     let sdp = "";
     try {
       const model = "gpt-4o-realtime-preview";
-      const r = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
+      const r = await fetch(`https://api.openai.com/v1/realtime?model=${model}&protocol=webrtc`, {
         method: "POST",
         body: offer.sdp || "",
-        headers: { Authorization: `Bearer ${EPHEMERAL_KEY}`, "Content-Type": "application/sdp" },
+        headers: { Authorization: `Bearer ${EPHEMERAL_KEY}`, "Content-Type": "application/sdp", "OpenAI-Beta": "realtime=v1" },
       });
+      const ct = r.headers.get('content-type') || '';
       sdp = await r.text();
+      if (!r.ok || !ct.toLowerCase().startsWith('application/sdp')) { setStatus('Realtime error: ' + sdp.slice(0, 300)); return; }
     } catch (e: any) {
       setStatus("Gagal negosiasi Realtime API: " + (e?.message || String(e)));
       return;

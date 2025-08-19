@@ -1,7 +1,6 @@
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+export const dynamic = "force-dynamic"; export const runtime = "nodejs";
 import { NextResponse } from "next/server";
-export async function GET() {
+export async function GET(){
   const env = {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY ? "present" : "missing",
     REALTIME_MODEL: process.env.REALTIME_MODEL || "gpt-4o-realtime-preview",
@@ -15,6 +14,5 @@ export async function GET() {
     CHUNK_OVERLAP: process.env.CHUNK_OVERLAP || "120",
     ALLOWED_DOMAINS: process.env.ALLOWED_DOMAINS || "",
     RAG_EXTRA_URLS: (process.env.RAG_EXTRA_URLS || "").split(/\s*,\s*/).filter(Boolean).length
-  };
-  return NextResponse.json({ ok: true, env });
+  }; return NextResponse.json({ ok:true, env });
 }

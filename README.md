@@ -32,3 +32,8 @@ REALTIME_VOICE=shimmer
 ## v3.9.4d
 - Tambah `turn_detection: server_vad` (mic auto VAD)
 - Audio `<audio controls autoplay playsInline>` dan panel debug event
+
+
+## v3.9.4e
+- Tombol **Tes Audio** (mengirim `response.create` agar model berbicara).
+- Toggle **Ucapkan jawaban** agar model membacakan hasil RAG setelah tool dipanggil.

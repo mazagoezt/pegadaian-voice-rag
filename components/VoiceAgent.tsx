@@ -15,6 +15,12 @@ export default function VoiceAgent() {
   const pushLog = (m: string) => setLog(v => [new Date().toLocaleTimeString()+": "+m, ...v].slice(0, 20));
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
+  const [speakAnswers, setSpeakAnswers] = useState(true);
+  function speakTest(){
+    const dc = dcRef.current; if(!dc || dc.readyState!=="open") return;
+    const ev = { type: "response.create", response: { instructions: "Katakan: Tes audio berhasil.", modalities: ["audio"] } } as any;
+    dc.send(JSON.stringify(ev));
+  }
   async function connect() {
     setStatus("Mengambil token sesi...");
     let sess: any = null; let raw = "";
@@ -62,6 +68,10 @@ export default function VoiceAgent() {
               const res = await fetch("/api/rag/answer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) }).then(r => r.json());
               const out: OAIEvent = { type: "response.submit_tool_outputs", response_id: msg.response.id, tool_outputs: [{ tool_call_id: c.id, output: res?.answer || res?.text || "" }] };
               dc.send(JSON.stringify(out));
+              if (speakAnswers) {
+                const ev = { type: "response.create", response: { instructions: "Silakan bacakan jawaban di atas secara ringkas.", modalities: ["audio"] } } as any;
+                dc.send(JSON.stringify(ev));
+              }
             }
           }
         } else if (msg.type === "response.output_text.delta") {
@@ -90,6 +100,7 @@ export default function VoiceAgent() {
   function disconnect() { dcRef.current?.close(); pcRef.current?.close(); dcRef.current = null; pcRef.current = null; setConnected(false); setStatus("Terputus"); }
   return (
     <div className="space-y-3">
+      <div className="text-xs text-slate-600">Gunakan tombol <strong>Tes Audio</strong> untuk memastikan jalur audio keluar OK.</div>
       <div className="flex items-center gap-3">
         {!connected ? (
           <button onClick={connect} className="px-4 py-2 rounded-2xl bg-emerald-600 text-white">Hubungkan & Bicara</button>
@@ -97,6 +108,10 @@ export default function VoiceAgent() {
           <button onClick={disconnect} className="px-4 py-2 rounded-2xl bg-slate-700 text-white">Putuskan</button>
         )}
         <span className="text-sm text-slate-600">{status}</span>
+      </div>
+      <div className="flex items-center gap-3">
+        <button onClick={speakTest} className="px-2 py-1 rounded bg-sky-600 text-white text-xs">Tes Audio</button>
+        <label className="text-xs flex items-center gap-1"><input type="checkbox" checked={speakAnswers} onChange={e=>setSpeakAnswers(e.target.checked)} /> Ucapkan jawaban</label>
       </div>
       <audio ref={remoteAudioRef} controls />
       <div className="text-xs border rounded-lg p-2 mt-2 bg-white">

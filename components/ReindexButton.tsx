@@ -11,8 +11,9 @@ export default function ReindexButton() {
       const j = await res.json();
       if (j.ok) setStatus(`Sukses. Dokumen: ${j.docs}, fee: ${j.fees}`);
       else setStatus(`Gagal: ${j.error || "unknown error"}`);
-    } catch (e: any) { setStatus("Gagal: " + (e?.message || String(e))); }
-    finally { setLoading(false); }
+    } catch (e: any) {
+      setStatus("Gagal: " + (e?.message || String(e)));
+    } finally { setLoading(false); }
   };
   return (
     <div className="flex items-center gap-3">

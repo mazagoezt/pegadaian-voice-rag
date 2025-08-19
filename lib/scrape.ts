@@ -11,7 +11,7 @@ export function scrapeWithFallback(html: string) {
   $("script[type='application/ld+json']").each((_, el) => {
     try { const j = JSON.parse($(el).contents().text()); const arr = Array.isArray(j) ? j : [j];
       for (const it of arr) if (typeof it === "object") { if (it.description) textBlocks.push(String(it.description)); if (it.headline) textBlocks.push(String(it.headline)); } }
-    catch {}
+    } catch {}
   });
   const content = textBlocks.join(" ").replace(/\s+/g, " ").trim();
   return { title: title || "", content };

@@ -1,22 +1,17 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
 import { NextResponse } from "next/server";
-
 export async function GET() {
   const model = process.env.REALTIME_MODEL || "gpt-4o-realtime-preview";
   const voice = process.env.REALTIME_VOICE || "shimmer";
   const apiKey = process.env.OPENAI_API_KEY;
-  const org = process.env.OPENAI_ORG_ID; // optional
-
+  const org = process.env.OPENAI_ORG_ID;
   if (!apiKey) return NextResponse.json({ ok: false, error: "OPENAI_API_KEY not set on server." }, { status: 500 });
-
   const headers: Record<string,string> = {
     "Authorization": `Bearer ${apiKey}`,
     "Content-Type": "application/json",
   };
   if (org) headers["OpenAI-Organization"] = org;
-
   try {
     const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",

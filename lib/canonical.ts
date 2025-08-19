@@ -10,14 +10,12 @@ export function bestCanonicalUrl(query: string, extraCsv: string): string | null
 
   let best: string | null = null;
   let bestScore = 0;
+  const qSlug = qTokens.join("-");
 
   for (const u of urls) {
     let score = 0;
     const slug = tokens(u).join("-");
     for (const t of qTokens) if (slug.includes(t)) score += 1;
-
-    // Strong boosts for common product slugs
-    const qSlug = qTokens.join("-");
     const boosts: [RegExp, number][] = [
       [/pinjaman-serbaguna/, 3],
       [/gadai-emas/, 3],
@@ -29,9 +27,7 @@ export function bestCanonicalUrl(query: string, extraCsv: string): string | null
       [/gadai-kendaraan/, 2]
     ];
     for (const [re, b] of boosts) if (re.test(slug) && re.test(qSlug)) score += b;
-
     if (score > bestScore) { bestScore = score; best = u; }
   }
-  // minimal threshold supaya tidak salah arah
   return bestScore >= 2 ? best : null;
 }

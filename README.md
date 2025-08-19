@@ -1,9 +1,10 @@
-# Pegadaian Voice RAG — v3.9.3 (Embedding Debug Included)
+# Pegadaian Voice RAG — v3.9.4 (Lengkap: Voice + Reindex + Debug)
 
 Endpoint penting:
-- `GET /api/health` — cek ENV yang terbaca.
-- `GET /api/debug/embed` — tes embeddings kecil (`["ping"]`), menampilkan status & cuplikan respons.
+- `GET /api/health` — cek ENV.
+- `GET /api/debug/embed` — tes embeddings kecil.
 - `POST /api/rag/reindex` — bangun indeks.
+- `POST /api/rag/answer` — jawaban terarah (canonical jika cocok).
 
 ## ENV minimal
 ```
@@ -16,4 +17,7 @@ EMBED_BATCH_SIZE=32
 MAX_CRAWL_URLS=10
 CHUNK_SIZE=900
 CHUNK_OVERLAP=120
+QA_MODEL=gpt-4o-mini
+REALTIME_MODEL=gpt-4o-realtime-preview
+REALTIME_VOICE=shimmer
 ```

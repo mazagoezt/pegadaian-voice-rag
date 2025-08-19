@@ -4,10 +4,13 @@ import { NextResponse } from "next/server";
 export async function GET() {
   const env = {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY ? "present" : "missing",
+    REALTIME_MODEL: process.env.REALTIME_MODEL || "gpt-4o-realtime-preview",
+    REALTIME_VOICE: process.env.REALTIME_VOICE || "shimmer",
+    QA_MODEL: process.env.QA_MODEL || "gpt-4o-mini",
     EMBED_MODEL: process.env.EMBED_MODEL || "text-embedding-3-small",
-    EMBED_BATCH_SIZE: process.env.EMBED_BATCH_SIZE || "48",
+    EMBED_BATCH_SIZE: process.env.EMBED_BATCH_SIZE || "32",
     ONLY_EXTRA: process.env.ONLY_EXTRA || "true",
-    MAX_CRAWL_URLS: process.env.MAX_CRAWL_URLS || "20",
+    MAX_CRAWL_URLS: process.env.MAX_CRAWL_URLS || "10",
     CHUNK_SIZE: process.env.CHUNK_SIZE || "900",
     CHUNK_OVERLAP: process.env.CHUNK_OVERLAP || "120",
     ALLOWED_DOMAINS: process.env.ALLOWED_DOMAINS || "",

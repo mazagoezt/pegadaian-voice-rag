@@ -1,9 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
 import { searchRag } from "@/lib/rag";
-
 export async function POST(req: NextRequest) {
   const { query } = await req.json();
   if (!query) return NextResponse.json({ error: "query required" }, { status: 400 });

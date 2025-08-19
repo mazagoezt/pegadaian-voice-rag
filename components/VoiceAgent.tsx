@@ -19,7 +19,6 @@ export default function VoiceAgent() {
 
   async function connect() {
     setStatus("Mengambil token sesi...");
-
     let sess: any = null;
     let raw = "";
     try {
@@ -60,7 +59,7 @@ export default function VoiceAgent() {
       const sessionUpdate: OAIEvent = {
         type: "session.update",
         session: {
-          instructions: "Kamu adalah asisten portofolio Pegadaian. Berbahasa Indonesia natural, ramah, dan ringkas. Jawab HANYA berdasarkan hasil fungsi search_company. Jika tidak ada data, katakan tidak tahu. Jangan menyebutkan sumber atau URL kecuali pengguna memintanya secara eksplisit. Jika ada angka tarif/biaya, sebutkan angkanya eksplisit dengan satuan rupiah atau persen.",
+          instructions: "Kamu adalah asisten portofolio Pegadaian. Berbahasa Indonesia natural, ramah, dan ringkas. Jawab HANYA berdasarkan hasil fungsi search_company. Jika tidak ada data, katakan belum tercantum. Jangan menyebutkan sumber atau URL kecuali diminta.",
           modalities: ["audio","text"],
           voice: "shimmer",
           tools: [{
@@ -144,7 +143,7 @@ export default function VoiceAgent() {
         <span className="text-sm text-slate-600">{status}</span>
       </div>
       <audio ref={remoteAudioRef} />
-      <p className="text-xs text-slate-500">Tips: “apa itu pinjaman serbaguna?” atau “biaya gadai emas apa saja?”</p>
+      <p className="text-xs text-slate-500">Contoh: “apa itu pinjaman serbaguna?”, “biaya gadai emas apa saja?”</p>
     </div>
   );
 }

@@ -37,7 +37,7 @@ export default function VoiceAgent() {
     catch(e:any){ setStatus("Izin mikrofon ditolak/tidak tersedia: " + (e?.message || String(e))); return; }
 
     // WebRTC
-    let audioSpoken = false;
+    let audioSpoken = false; let audioDelta = false;
     const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
     pcRef.current = pc;
     try { pc.addTransceiver("audio", { direction: "recvonly" }); } catch {}
@@ -77,6 +77,8 @@ export default function VoiceAgent() {
         const msg: AnyObj = JSON.parse(e.data);
         if (msg.type && typeof msg.type === "string" && msg.type.startsWith("response.")) pushLog("evt:" + msg.type);
 
+        if (msg.type === "response.output_audio.delta") { audioDelta = true; }
+
         if (msg.type === "response.required_action" && msg.response?.required_action?.type === "submit_tool_outputs") {
           const calls = msg.response.required_action.submit_tool_outputs.tool_calls || [];
           for (const c of calls) if (c.type === "function" && c.name === "search_company") {
@@ -93,9 +95,9 @@ export default function VoiceAgent() {
           }
         } else if (msg.type === "response.output_text.delta") {
           textBuf += msg.delta || "";
-        } else if (msg.type === "response.completed") {
+        } else if (msg.type === "response.completed" || msg.type === "response.done") {
           if (textBuf) pushLog("asr/answer: " + textBuf.slice(0, 120));
-          if (speakAnswers && textBuf && !audioSpoken) {
+          if (speakAnswers && textBuf && !audioSpoken && !audioDelta) {
             const say = textBuf.slice(0, 800);
             const speak: AnyObj = { type:"response.create", response:{ modalities:["audio"], instructions: say } };
             dc.send(JSON.stringify(speak));

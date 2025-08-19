@@ -147,7 +147,12 @@ export default function VoiceAgent() {
       });
       const ct = r.headers.get('content-type') || '';
       sdp = await r.text();
-      if (!r.ok || !ct.toLowerCase().startsWith('application/sdp')) { setStatus('Realtime error: ' + sdp.slice(0, 300)); return; }
+      const sdpTrim = (sdp || '').trim();
+      const looksLikeSDP = /^v=/.test(sdpTrim);
+      if (!r.ok || (!ct.toLowerCase().startsWith('application/sdp') && !looksLikeSDP)) {
+        setStatus('Realtime error: ' + sdp.slice(0, 300));
+        return;
+      }
     } catch (e: any) {
       setStatus("Gagal negosiasi Realtime API: " + (e?.message || String(e)));
       return;

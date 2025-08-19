@@ -37,3 +37,9 @@ REALTIME_VOICE=shimmer
 ## v3.9.4e
 - Tombol **Tes Audio** (mengirim `response.create` agar model berbicara).
 - Toggle **Ucapkan jawaban** agar model membacakan hasil RAG setelah tool dipanggil.
+
+
+## v3.9.4f
+- STUN server + `pc.addTransceiver('audio', {direction:'recvonly'})`
+- Autoplay paksa saat klik Connect
+- Tombol **Beep** untuk uji lokal output device

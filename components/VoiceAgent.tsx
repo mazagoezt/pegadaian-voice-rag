@@ -21,7 +21,20 @@ export default function VoiceAgent() {
     const ev = { type: "response.create", response: { instructions: "Katakan: Tes audio berhasil.", modalities: ["audio"] } } as any;
     dc.send(JSON.stringify(ev));
   }
+  function beepTest(){
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = 880; g.gain.value = 0.05; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(()=>{o.stop(); ctx.close();}, 600);
+    } catch {}
+  }
+    const dc = dcRef.current; if(!dc || dc.readyState!=="open") return;
+    const ev = { type: "response.create", response: { instructions: "Katakan: Tes audio berhasil.", modalities: ["audio"] } } as any;
+    dc.send(JSON.stringify(ev));
+  }
   async function connect() {
+    // Try initiate audio playback early (user gesture context)
+    try { if (remoteAudioRef.current) { const el = remoteAudioRef.current; (el as any).playsInline = true; el.autoplay = true; el.muted = false; await el.play().catch(()=>{}); } } catch {}
     setStatus("Mengambil token sesi...");
     let sess: any = null; let raw = "";
     try { const resp = await timeoutFetch("/api/realtime/session", 12000, { cache: "no-store" }); raw = await resp.text(); try { sess = JSON.parse(raw); } catch {} }
@@ -29,7 +42,8 @@ export default function VoiceAgent() {
     const EPHEMERAL_KEY = sess?.client_secret?.value;
     if (!EPHEMERAL_KEY) { setStatus("Gagal ambil token: " + (sess?.error || raw?.slice(0, 300))); return; }
     let ms: MediaStream; try { ms = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e: any) { setStatus("Izin mikrofon ditolak: " + (e?.message || String(e))); return; }
-    const pc = new RTCPeerConnection(); pcRef.current = pc; pc.onconnectionstatechange = () => pushLog("pc.state="+pc.connectionState);
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }); pcRef.current = pc; pc.onconnectionstatechange = () => pushLog("pc.state="+pc.connectionState);
+    try { pc.addTransceiver("audio", { direction: "recvonly" }); } catch {}
     pc.ontrack = (event) => {
       pushLog("Remote track received"); const [stream] = event.streams; if (remoteAudioRef.current) { const el = remoteAudioRef.current as HTMLAudioElement; el.autoplay = true; el.muted = false; (el as any).playsInline = true; el.srcObject = stream; el.play().then(()=>pushLog("Audio playing")).catch(err=>pushLog("Audio play blocked: "+(err?.message||String(err)))); } };
     const dc = pc.createDataChannel("oai-events"); dcRef.current = dc;
@@ -111,6 +125,7 @@ export default function VoiceAgent() {
       </div>
       <div className="flex items-center gap-3">
         <button onClick={speakTest} className="px-2 py-1 rounded bg-sky-600 text-white text-xs">Tes Audio</button>
+        <button onClick={beepTest} className="px-2 py-1 rounded bg-amber-600 text-white text-xs">Beep</button>
         <label className="text-xs flex items-center gap-1"><input type="checkbox" checked={speakAnswers} onChange={e=>setSpeakAnswers(e.target.checked)} /> Ucapkan jawaban</label>
       </div>
       <audio ref={remoteAudioRef} controls />

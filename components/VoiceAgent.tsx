@@ -31,7 +31,7 @@ export default function VoiceAgent() {
         session: {
           instructions: "Kamu asisten Pegadaian. Bahasa Indonesia natural, ramah. Jawab HANYA berdasarkan fungsi search_company; jangan sebutkan sumber/URL.",
           modalities: ["audio","text"], voice: "shimmer",
-          tools: [{
+          tool_choice: { type: "function", name: "search_company" }, tools: [{
             type: "function", name: "search_company",
             description: "Ringkas jawaban dari domain resmi berdasarkan query (tanpa URL).",
             parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] }
@@ -45,7 +45,20 @@ export default function VoiceAgent() {
     dc.onmessage = async (e) => {
       try {
         const msg: OAIEvent = JSON.parse(e.data);
-        if (msg.type === "tool_call" && msg.name === "search_company") {
+        // Realtime tool flow: respond to required_action -> submit_tool_outputs
+        if (msg.type === "response.required_action" && msg.response?.required_action?.type === "submit_tool_outputs") {
+          const calls = msg.response.required_action.submit_tool_outputs.tool_calls || [];
+          for (const c of calls) {
+            if (c.type === "function" && c.name === "search_company") {
+              let args: any = {};
+              try { args = typeof c.arguments === "string" ? JSON.parse(c.arguments) : (c.arguments || {}); } catch {}
+              const q = args?.query || "";
+              const res = await fetch("/api/rag/answer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) }).then(r => r.json());
+              const out: OAIEvent = { type: "response.submit_tool_outputs", response_id: msg.response.id, tool_outputs: [{ tool_call_id: c.id, output: res?.answer || res?.text || "" }] };
+              dc.send(JSON.stringify(out));
+            }
+          }
+        } else if (msg.type === "tool_call" && msg.name === "search_company") {
           const q = msg?.arguments?.query || "";
           const res = await fetch("/api/rag/answer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) }).then(r => r.json());
           const toolOut: OAIEvent = { type: "tool_output", tool_call_id: msg.id, output: res?.answer || res?.text || "" };

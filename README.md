@@ -23,3 +23,7 @@ QA_MODEL=gpt-4o-mini
 REALTIME_MODEL=gpt-4o-realtime-preview
 REALTIME_VOICE=shimmer
 ```
+
+
+## v3.9.4c
+- VoiceAgent: paksa model SELALU memanggil tool `search_company` (tool_choice) dan menangani event `response.required_action -> submit_tool_outputs`.

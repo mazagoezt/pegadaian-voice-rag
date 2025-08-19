@@ -183,7 +183,7 @@ export default function VoiceAgent() {
       </div>
       <div className="flex items-center gap-3">
         <button onClick={speakTest} className="px-2 py-1 rounded bg-sky-600 text-white text-xs">Tes Audio</button>
-        <button onClick={async()=>{ try{ const el = remoteAudioRef.current; if(!el) return; (el as any).srcObject = null; el.src = `/api/tts/say?text=${encodeURIComponent("Tes audio berhasil.")}`; await el.play(); } catch(e:any){ setStatus("Gagal putar REST TTS: "+(e?.message || String(e))); } }} className="px-2 py-1 rounded bg-fuchsia-700 text-white text-xs">Tes Audio (REST)</button>
+        <button onClick={async()=>{ try{ const el = remoteAudioRef.current; if(!el) return; (el as any).srcObject = null; const res = await fetch(`/api/tts/say?text=${encodeURIComponent("Tes audio berhasil.")}`); const ctype = res.headers.get('Content-Type') || ''; if(!res.ok || !ctype.includes('audio')){ const txt = await res.text(); setStatus('REST TTS error: ' + txt.slice(0,200)); return; } const blob = await res.blob(); el.src = URL.createObjectURL(blob); await el.play(); } catch(e:any){ setStatus('Gagal putar REST TTS: ' + (e?.message || String(e))); } }} className="px-2 py-1 rounded bg-fuchsia-700 text-white text-xs">Tes Audio (REST)</button>
         <button onClick={beepTest} className="px-2 py-1 rounded bg-amber-600 text-white text-xs">Beep</button>
         <label className="text-xs flex items-center gap-1"><input type="checkbox" checked={speakAnswers} onChange={e=>setSpeakAnswers(e.target.checked)} /> Ucapkan jawaban</label>
       </div>

@@ -30,3 +30,7 @@ TTS_MODEL=gpt-4o-mini-tts
 - **Tombol tidak merespon** → pastikan `VoiceAgent.tsx` punya `"use client"` dan `app/page.tsx` import dengan `dynamic(..., { ssr:false })` (sudah di repo).
 - **Tidak ada suara** → coba `Tes Audio (REST)`; jika bunyi, masalahnya khusus WebRTC (coba hotspot). Panel Debug akan log `pc.state=...` dan `Remote track received`.
 - **Index kosong** → klik **Bangun / Refresh Indeks** setelah `RAG_EXTRA_URLS` diisi.
+
+
+## v3.9.5a
+- Perbaikan **Tes Audio (REST)**: gunakan endpoint `/v1/audio/speech` (model default `tts-1`), dan client memutar lewat Blob URL agar kompatibel lintas browser.

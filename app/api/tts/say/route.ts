@@ -7,26 +7,27 @@ export async function GET(req: NextRequest){
   const { searchParams } = new URL(req.url);
   const text = searchParams.get("text") || "Tes audio berhasil.";
   const voice = process.env.REALTIME_VOICE || "shimmer";
-  const model = process.env.TTS_MODEL || process.env.QA_MODEL || "gpt-4o-mini-tts";
+  const model = process.env.TTS_MODEL || "tts-1"; // safer default
 
   try {
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    const r = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+      headers: {
+        "Authorization": `Bearer ${key}`,
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({
         model,
-        modalities: ["text","audio"],
-        audio: { voice, format: "mp3" },
-        messages: [{ role: "user", content: text }],
-        temperature: 0.2
+        voice,
+        input: text,
+        format: "mp3"
       })
     });
-    const txt = await r.text();
-    if (!r.ok) return NextResponse.json({ ok:false, status:r.status, error: txt.slice(0,800) }, { status:r.status });
-    const j = JSON.parse(txt);
-    const a = j?.choices?.[0]?.message?.audio?.data;
-    if (!a) return NextResponse.json({ ok:false, error:"No audio data in response", raw: j }, { status:500 });
-    const buf = Buffer.from(a, "base64");
+    if (!r.ok) {
+      const err = await r.text();
+      return NextResponse.json({ ok:false, status:r.status, error: err.slice(0, 800) }, { status: r.status });
+    }
+    const buf = Buffer.from(await r.arrayBuffer());
     return new NextResponse(buf, { status: 200, headers: { "Content-Type": "audio/mpeg" } });
   } catch(e:any){
     return NextResponse.json({ ok:false, error: e?.message || String(e) }, { status: 500 });

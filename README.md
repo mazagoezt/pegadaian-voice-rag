@@ -1,4 +1,4 @@
-# Pegadaian Voice RAG — v3.9.6b
+# Pegadaian Voice RAG — v3.9.6
 
 Fitur:
 - **Voice Realtime (WebRTC)**: Indonesia natural, suara `shimmer`. Otomatis **membacakan** jawaban teks jika model tidak mengirim audio.

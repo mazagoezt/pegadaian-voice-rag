@@ -24,3 +24,8 @@ REALTIME_VOICE=shimmer
 2) Set ENV di atas (Production/Preview aktif), redeploy.  
 3) Buka `/api/health` → cek `build: v3.9.4h` & `OPENAI_API_KEY: present`.  
 4) Klik **Bangun / Refresh Indeks** → coba **Tanya** & **Hubungkan & Bicara**.
+
+
+## v3.9.4i
+- Tambah endpoint **/api/tts/say** (fallback REST TTS) dan tombol **Tes Audio (REST)** yang tidak butuh WebRTC.
+- Tambah header `OpenAI-Beta: realtime=v1` di pembuatan session Realtime.

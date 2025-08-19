@@ -14,6 +14,7 @@ export default function Page() {
         <h2 className="font-semibold mb-2">1) Voice: Hubungkan &amp; Bicara</h2>
         <p className="text-xs mb-2">Realtime voice (wanita: shimmer, Bahasa Indonesia natural).</p>
         <VoiceAgent />
+        <div className="mt-2 text-xs text-slate-500">Jika tidak terdengar suara, lihat panel <strong>Debug</strong> di bawah.</div>
       </section>
       <section className="p-4 rounded-2xl border bg-white">
         <h2 className="font-semibold mb-2">2) Tanya (teks)</h2>

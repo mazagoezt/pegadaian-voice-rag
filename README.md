@@ -27,3 +27,8 @@ REALTIME_VOICE=shimmer
 
 ## v3.9.4c
 - VoiceAgent: paksa model SELALU memanggil tool `search_company` (tool_choice) dan menangani event `response.required_action -> submit_tool_outputs`.
+
+
+## v3.9.4d
+- Tambah `turn_detection: server_vad` (mic auto VAD)
+- Audio `<audio controls autoplay playsInline>` dan panel debug event

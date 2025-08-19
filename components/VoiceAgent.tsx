@@ -11,6 +11,8 @@ export default function VoiceAgent() {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState("Siap");
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const [log, setLog] = useState<string[]>([]);
+  const pushLog = (m: string) => setLog(v => [new Date().toLocaleTimeString()+": "+m, ...v].slice(0, 20));
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   async function connect() {
@@ -21,8 +23,9 @@ export default function VoiceAgent() {
     const EPHEMERAL_KEY = sess?.client_secret?.value;
     if (!EPHEMERAL_KEY) { setStatus("Gagal ambil token: " + (sess?.error || raw?.slice(0, 300))); return; }
     let ms: MediaStream; try { ms = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e: any) { setStatus("Izin mikrofon ditolak: " + (e?.message || String(e))); return; }
-    const pc = new RTCPeerConnection(); pcRef.current = pc;
-    pc.ontrack = (event) => { const [stream] = event.streams; if (remoteAudioRef.current) { remoteAudioRef.current.srcObject = stream; remoteAudioRef.current.play().catch(() => {}); } };
+    const pc = new RTCPeerConnection(); pcRef.current = pc; pc.onconnectionstatechange = () => pushLog("pc.state="+pc.connectionState);
+    pc.ontrack = (event) => {
+      pushLog("Remote track received"); const [stream] = event.streams; if (remoteAudioRef.current) { const el = remoteAudioRef.current as HTMLAudioElement; el.autoplay = true; el.muted = false; (el as any).playsInline = true; el.srcObject = stream; el.play().then(()=>pushLog("Audio playing")).catch(err=>pushLog("Audio play blocked: "+(err?.message||String(err)))); } };
     const dc = pc.createDataChannel("oai-events"); dcRef.current = dc;
     dc.onopen = () => {
       setStatus("Terhubung — mendaftar tools...");
@@ -31,6 +34,7 @@ export default function VoiceAgent() {
         session: {
           instructions: "Kamu asisten Pegadaian. Bahasa Indonesia natural, ramah. Jawab HANYA berdasarkan fungsi search_company; jangan sebutkan sumber/URL.",
           modalities: ["audio","text"], voice: "shimmer",
+          turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 250, silence_duration_ms: 400 },
           tool_choice: { type: "function", name: "search_company" }, tools: [{
             type: "function", name: "search_company",
             description: "Ringkas jawaban dari domain resmi berdasarkan query (tanpa URL).",
@@ -43,8 +47,10 @@ export default function VoiceAgent() {
       setConnected(true);
     };
     dc.onmessage = async (e) => {
+      let textBuf = "";
       try {
         const msg: OAIEvent = JSON.parse(e.data);
+        if (msg.type && msg.type.startsWith("response.")) pushLog("evt:"+msg.type);
         // Realtime tool flow: respond to required_action -> submit_tool_outputs
         if (msg.type === "response.required_action" && msg.response?.required_action?.type === "submit_tool_outputs") {
           const calls = msg.response.required_action.submit_tool_outputs.tool_calls || [];
@@ -58,6 +64,11 @@ export default function VoiceAgent() {
               dc.send(JSON.stringify(out));
             }
           }
+        } else if (msg.type === "response.output_text.delta") {
+          textBuf += msg.delta || "";
+        } else if (msg.type === "response.completed") {
+          if (textBuf) pushLog("asr/answer: "+textBuf.slice(0,120));
+          textBuf = "";
         } else if (msg.type === "tool_call" && msg.name === "search_company") {
           const q = msg?.arguments?.query || "";
           const res = await fetch("/api/rag/answer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) }).then(r => r.json());
@@ -87,7 +98,11 @@ export default function VoiceAgent() {
         )}
         <span className="text-sm text-slate-600">{status}</span>
       </div>
-      <audio ref={remoteAudioRef} />
+      <audio ref={remoteAudioRef} controls />
+      <div className="text-xs border rounded-lg p-2 mt-2 bg-white">
+        <div className="font-semibold mb-1">Debug</div>
+        {log.slice(0,8).map((l,i)=>(<div key={i}>{l}</div>))}
+      </div>
     </div>
   );
 }

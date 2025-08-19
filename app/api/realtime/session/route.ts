@@ -1,15 +1,4 @@
-export const dynamic = "force-dynamic"; export const runtime = "nodejs";
+
+export const runtime="nodejs"; export const dynamic="force-dynamic";
 import { NextResponse } from "next/server";
-export async function GET(){
-  const model = process.env.REALTIME_MODEL || "gpt-4o-realtime-preview";
-  const voice = process.env.REALTIME_VOICE || "shimmer";
-  const apiKey = process.env.OPENAI_API_KEY; const org = process.env.OPENAI_ORG_ID;
-  if(!apiKey) return NextResponse.json({ ok:false, error:"OPENAI_API_KEY not set" }, { status:500 });
-  const headers: Record<string,string> = { "Authorization":`Bearer ${apiKey}`, "Content-Type":"application/json", "OpenAI-Beta":"realtime=v1" };
-  if (org) headers["OpenAI-Organization"] = org;
-  try{ const r = await fetch("https://api.openai.com/v1/realtime/sessions",{ method:"POST", headers, body: JSON.stringify({ model, voice }) });
-    const text = await r.text(); if(!r.ok) return NextResponse.json({ ok:false, status:r.status, error:text }, { status:500 });
-    const j = JSON.parse(text); if(!j?.client_secret?.value) return NextResponse.json({ ok:false, error:"No client_secret.value", raw:j }, { status:500 });
-    return NextResponse.json({ ...j, session_model: model });
-  } catch(e:any){ return NextResponse.json({ ok:false, error:e?.message || String(e) }, { status:500 }); }
-}
+export async function GET(){ const model=process.env.REALTIME_MODEL||"gpt-4o-realtime-preview"; const voice=process.env.REALTIME_VOICE||"shimmer"; const key=process.env.OPENAI_API_KEY; if(!key) return NextResponse.json({ok:false,error:"OPENAI_API_KEY not set"},{status:500}); const r=await fetch("https://api.openai.com/v1/realtime/sessions",{method:"POST",headers:{"Authorization":`Bearer ${key}","Content-Type":"application/json","OpenAI-Beta":"realtime=v1"},body:JSON.stringify({model,voice})}); const txt=await r.text(); if(!r.ok) return NextResponse.json({ok:false,status:r.status,error:txt},{status:r.status}); let j:any={}; try{ j=JSON.parse(txt);}catch{} if(!j?.client_secret?.value) return NextResponse.json({ok:false,error:"No client_secret.value",raw:j},{status:500}); return NextResponse.json({...j,session_model:model}); }

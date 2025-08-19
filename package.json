@@ -1,7 +1,7 @@
 {
-  "name": "pegadaian-voice-rag",
+  "name": "pegadaian-voice-rag-vercel",
   "private": true,
-  "version": "3.9.6v2",
+  "version": "3.8.3b",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

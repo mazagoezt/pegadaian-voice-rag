@@ -1,4 +1,7 @@
-# Vercel Package — v3.9.6v2
-Halaman "/" memakai Pages Router (`pages/index.tsx`) **saja**.
-Pastikan **tidak ada** `app/page.tsx` di repo untuk menghindari error:
-`Conflicting app and page file was found: "pages/index.tsx" - "app/page.tsx"`.
+
+# Pegadaian Voice RAG — Vercel (v3.8.3b)
+- "/" pakai Pages Router (SSR). API di App Router.
+- Auto-speak saat model hanya keluarkan teks.
+- Jawaban tidak menyebut URL/sumber.
+
+ENV minimal: lihat .env.example

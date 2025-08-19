@@ -7,9 +7,9 @@ export async function POST(req: NextRequest){ const body = await req.json(); con
   const extraCsv = process.env.RAG_EXTRA_URLS || ""; const canon = bestCanonicalUrl(query, extraCsv);
   try{
     if(canon){ const { title, content } = await fetchText(canon); const contextText = `${title}\n---\n${content}`.slice(0,15000);
-      const system = isDef(query) ? "Jelaskan produk yang ditanyakan... HANYA dari konteks di bawah. Jangan sebutkan sumber/URL." :
-        (isFee(query) ? "Sebutkan angka biaya/tarif dari konteks bila ada... Jangan sebutkan sumber/URL." :
-        "Jawab ringkas dari konteks. Jangan sebutkan sumber/URL. Jika info spesifik tak ada, katakan belum tercantum.");
+      const system = isDef(query) ? "Jelaskan produk yang ditanyakan (definisi, manfaat, siapa yang cocok). Jawab HANYA dari konteks di bawah. Jangan sebutkan sumber/URL." :
+        (isFee(query) ? "Sebutkan angka biaya/tarif dari konteks bila ada. Jika tidak ada, katakan belum tercantum. Jangan sebutkan sumber/URL." :
+        "Jawab ringkas dari konteks. Jangan sebutkan sumber/URL. Jika info spesifik tidak ada, katakan belum tercantum.");
       const model = process.env.QA_MODEL || "gpt-4o-mini";
       const r = await fetch("https://api.openai.com/v1/chat/completions", { method:"POST", headers:{ "Authorization":`Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type":"application/json" },
         body: JSON.stringify({ model, temperature:0.1, messages:[ { role:"system", content: system }, { role:"user", content:`Pertanyaan: ${query}` }, { role:"user", content:`KONTEKS (wajib):\n${contextText}` } ] }) });
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest){ const body = await req.json(); con
     const hits = await searchRag(query,6); const fees = searchFees(query);
     if(isFee(query) && fees.length){ const formatted = `Berikut rincian yang relevan:\n${fees.map(f=>`• ${f.label}: ${f.value}${f.unit ? " " + f.unit : ""}`).join("\n")}\nCatatan: angka dapat berubah.`; return NextResponse.json({ answer: formatted, source:"fees+rag" }); }
     const contextText = hits.map((h,i)=>`[#${i+1}] ${h.title}\n---\n${h.snippet}`).join("\n\n"); const model = process.env.QA_MODEL || "gpt-4o-mini";
-    const sys = isDef(query) ? "Jelaskan definisi produk..." : "Jawab ringkas dan relevan dari konteks berikut. Jangan sebutkan sumber/URL.";
+    const sys = isDef(query) ? "Jelaskan definisi produk berdasarkan konteks berikut. Jangan sebutkan sumber/URL." : "Jawab ringkas dan relevan hanya dari konteks berikut. Jangan sebutkan sumber/URL.";
     const r = await fetch("https://api.openai.com/v1/chat/completions", { method:"POST", headers:{ "Authorization":`Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type":"application/json" },
       body: JSON.stringify({ model, temperature:0.2, messages:[ { role:"system", content: sys }, { role:"user", content:`Pertanyaan: ${query}\n\nKonteks:\n${contextText}` } ] }) });
     if(!r.ok){ const err = await r.text(); return NextResponse.json({ answer:"Maaf, terjadi kendala memproses jawaban.", error: err }, { status:500 }); }

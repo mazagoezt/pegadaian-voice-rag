@@ -2,7 +2,7 @@ export const metadata = { title: "Asisten Suara Pegadaian", description: "Voice 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id">
-      <body style={{ fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial' }}>{children}</body>
+      <body style={{ fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial', background:'#f8fafc' }}>{children}</body>
     </html>
   );
 }

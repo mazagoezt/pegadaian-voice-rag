@@ -1,10 +1,9 @@
-# Pegadaian Voice RAG — v3.9.5d
+# Pegadaian Voice RAG — v3.9.6
 
-Fitur utama:
-- **Hubungkan & Bicara (Realtime WebRTC)** — suara `shimmer` (wanita), Indonesia natural, paksa tool-call ke RAG.
-- **Tanya (teks)** — POST ke `/api/rag/answer` (tanpa sebut sumber).
-- **Bangun / Refresh Indeks** — POST ke `/api/rag/reindex`.
-- Panel **Debug**, tombol **Tes Audio**, **Tes Audio (REST)**, dan **Beep**.
+Fitur:
+- **Voice Realtime (WebRTC)**: Indonesia natural, suara `shimmer`. Otomatis **membacakan** jawaban teks jika model tidak mengirim audio.
+- **RAG**: Reindex dari situs resmi (ALLOWED_DOMAINS + RAG_EXTRA_URLS). Ekstraksi biaya/sewa modal dari tabel & paragraf.
+- **Tes Audio (REST)**, **Debug** panel, **/api/health** dan **/api/debug/embed**.
 
 ## ENV minimal
 OPENAI_API_KEY=sk-...
@@ -17,20 +16,16 @@ MAX_CRAWL_URLS=10
 CHUNK_SIZE=900
 CHUNK_OVERLAP=120
 QA_MODEL=gpt-4o-mini
-REALTIME_MODEL=gpt-4o-realtime-preview
+REALTIME_MODEL=gpt-4o-realtime-preview-2025-06-03
 REALTIME_VOICE=shimmer
-TTS_MODEL=gpt-4o-mini-tts
+TTS_MODEL=tts-1
 
-## Deploy cepat (Vercel)
-1) Upload repo ke GitHub → Vercel → Import → Deploy. (Project Settings → General → **Node.js Version = 20.x**)
-2) Set ENV di atas pada **Production** & **Preview**, lalu Redeploy.
-3) Buka `/api/health` → pastikan `build: v3.9.5` dan `OPENAI_API_KEY: present`.
+## Deploy
+- **Vercel**: Import repo → Node 20 → set ENV → Deploy.
+- **Render**: gunakan `render.yaml` (sudah termasuk).
+- **Netlify**: gunakan `netlify.toml` (sudah termasuk).
 
-## Troubleshooting
-- **Tombol tidak merespon** → pastikan `VoiceAgent.tsx` punya `"use client"` dan `app/page.tsx` import dengan `dynamic(..., { ssr:false })` (sudah di repo).
-- **Tidak ada suara** → coba `Tes Audio (REST)`; jika bunyi, masalahnya khusus WebRTC (coba hotspot). Panel Debug akan log `pc.state=...` dan `Remote track received`.
-- **Index kosong** → klik **Bangun / Refresh Indeks** setelah `RAG_EXTRA_URLS` diisi.
-
-
-## v3.9.5a
-- Perbaikan **Tes Audio (REST)**: gunakan endpoint `/v1/audio/speech` (model default `tts-1`), dan client memutar lewat Blob URL agar kompatibel lintas browser.
+## Uji cepat
+- `/api/health` → cek `build: v3.9.6` dan API key `present`.
+- Klik **Bangun / Refresh Indeks** → **Tanya**.
+- Voice: **Tes Audio (REST)** bunyi → **Hubungkan & Bicara**. Bila Debug hanya teks (tanpa audio), auto-speak akan membacakan.

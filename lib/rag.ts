@@ -1,6 +1,5 @@
 import * as cheerio from "cheerio";
 import { scrapeWithFallback } from "@/lib/scrape";
-
 export type Doc = { url: string; title: string; content: string; embedding?: number[] };
 export type Hit = { url: string; title: string; snippet: string; score: number };
 export type Fee = { url: string; title: string; label: string; value: string; unit?: string; context?: string };
@@ -83,7 +82,7 @@ export async function buildIndex() {
   const pages: Doc[] = [];
   for (const u of urls) { try { const { title, content } = await fetchPageText(u); const chunks = splitToChunks(content); for (const ch of chunks) pages.push({ url: u, title, content: ch }); } catch {} }
   if (!pages.length) throw new Error("No pages fetched");
-  const embs = await embedBatch(pages.map(p => p.content)); pages.forEach((p, i) => (p.embedding = embs[i])); 
+  const embs = await embedBatch(pages.map(p => p.content)); pages.forEach((p, i) => (p.embedding = embs[i]));
   INDEX = pages; return { docs: INDEX.length, fees: FEES.length };
 }
 

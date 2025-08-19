@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: pegadaian-voice-rag
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: REALTIME_MODEL
+        value: gpt-4o-realtime-preview-2025-06-03
+      - key: REALTIME_VOICE
+        value: shimmer
+      - key: QA_MODEL
+        value: gpt-4o-mini
+      - key: TTS_MODEL
+        value: tts-1
+      - key: ALLOWED_DOMAINS
+        value: https://www.pegadaian.co.id,https://www.sahabat.pegadaian.co.id
+      - key: RAG_EXTRA_URLS
+        value: https://www.sahabat.pegadaian.co.id/produk-pegadaian/pinjaman-serbaguna
+      - key: ONLY_EXTRA
+        value: "true"
+      - key: EMBED_MODEL
+        value: text-embedding-3-small
+      - key: EMBED_BATCH_SIZE
+        value: "32"
+      - key: MAX_CRAWL_URLS
+        value: "10"
+      - key: CHUNK_SIZE
+        value: "900"
+      - key: CHUNK_OVERLAP
+        value: "120"

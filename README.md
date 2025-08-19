@@ -1,4 +1,4 @@
-# Pegadaian Voice RAG — v3.9.4h
+# Pegadaian Voice RAG — v3.9.4i2
 
 - Halaman utama berisi: **Hubungkan & Bicara**, **Tanya**, **Bangun / Refresh Indeks**.
 - Voice memakai Realtime API (WebRTC), suara `shimmer` (wanita), bahasa Indonesia natural.
